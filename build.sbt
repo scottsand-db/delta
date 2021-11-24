@@ -36,10 +36,18 @@ lazy val core = (project in file("core"))
     releaseSettings,
     libraryDependencies ++= Seq(
       // Adding test classifier seems to break transitive resolution of the core dependencies
-      "org.apache.spark" %% "spark-hive" % sparkVersion % "provided",
-      "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
-      "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
-      "org.apache.spark" %% "spark-catalyst" % sparkVersion % "provided",
+      "org.apache.spark" %% "spark-hive" % sparkVersion % "provided" excludeAll(
+        ExclusionRule("org.codehaus.jackson", "jackson-core-asl")
+      ),
+      "org.apache.spark" %% "spark-sql" % sparkVersion % "provided" excludeAll(
+        ExclusionRule("org.codehaus.jackson", "jackson-core-asl")
+      ),
+      "org.apache.spark" %% "spark-core" % sparkVersion % "provided" excludeAll(
+        ExclusionRule("org.codehaus.jackson", "jackson-core-asl")
+      ),
+      "org.apache.spark" %% "spark-catalyst" % sparkVersion % "provided" excludeAll(
+        ExclusionRule("org.codehaus.jackson", "jackson-core-asl")
+      ),
 
       // Test deps
       "org.scalatest" %% "scalatest" % "3.1.0" % "test",
