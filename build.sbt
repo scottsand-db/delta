@@ -396,7 +396,6 @@ lazy val releaseSettings = Seq(
   Test / publishArtifact := false,
   releasePublishArtifactsAction := PgpKeys.publishSigned.value,
   releaseCrossBuild := true,
-  useGpg := false,
   pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray),
   credentials += Credentials(
     "Sonatype Nexus Repository Manager",
