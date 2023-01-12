@@ -470,6 +470,21 @@ releaseProcess := Seq[ReleaseStep](
   commitReleaseVersion,
   tagRelease,
   releaseStepCommandAndRemaining("+publishSigned"),
+  // Do NOT use `sonatypeBundleRelease` - it will actually release to Maven! We want to do that
+  // manually.
+  //
+  // See https://github.com/xerial/sbt-sonatype#publishing-your-artifact.
+  //
+  // - sonatypePrepare: Drop the existing staging repositories (if exist) and create a new staging
+  //                    repository using sonatypeSessionName as a unique key
+  // - sonatypeBundleUpload: Upload your local staging folder contents to a remote Sonatype
+  //                         repository
+  // - sonatypeClose: closes your staging repository at Sonatype. This step verifies Maven central
+  //                  sync requirement, GPG-signature, javadoc and source code presence, pom.xml
+  //                  settings, etc
+  // - sonatypePromote: verifies the closed repository so that it can be synchronized with Maven
+  //                    central
+  releaseStepCommand("sonatypePrepare; sonatypeBundleUpload; sonatypeClose"),
   setNextVersion,
   commitNextVersion
 )
