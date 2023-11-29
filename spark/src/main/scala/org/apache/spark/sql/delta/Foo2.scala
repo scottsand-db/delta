@@ -1,5 +1,5 @@
 package org.apache.spark.sql.delta
 
-class Foo {
+class Foo2 {
 
 }
