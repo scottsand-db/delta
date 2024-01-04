@@ -29,7 +29,6 @@ abstract class UniFormE2EIcebergSuiteBase extends UniFormE2ETest {
         s"""CREATE TABLE $testTableName (col1 INT) USING DELTA
            |TBLPROPERTIES (
            |  'delta.columnMapping.mode' = 'name',
-           |  'delta.enableIcebergCompatV1' = 'true',
            |  'delta.universalFormat.enabledFormats' = 'iceberg'
            |)""".stripMargin)
       write(s"INSERT INTO $testTableName VALUES (123)")
@@ -43,7 +42,6 @@ abstract class UniFormE2EIcebergSuiteBase extends UniFormE2ETest {
         s"""CREATE TABLE `$testTableName` (col1 INT) USING DELTA
            |TBLPROPERTIES (
            |  'delta.columnMapping.mode' = 'name',
-           |  'delta.enableIcebergCompatV1' = 'true',
            |  'delta.universalFormat.enabledFormats' = 'iceberg'
            |)""".stripMargin)
       write(s"INSERT INTO `$testTableName` VALUES (123),(456),(567),(331)")
@@ -61,7 +59,6 @@ abstract class UniFormE2EIcebergSuiteBase extends UniFormE2ETest {
            | , f6: INT>, f7: INT>) USING DELTA
            |TBLPROPERTIES (
            |  'delta.columnMapping.mode' = 'name',
-           |  'delta.enableIcebergCompatV1' = 'true',
            |  'delta.universalFormat.enabledFormats' = 'iceberg'
            |)""".stripMargin)
 

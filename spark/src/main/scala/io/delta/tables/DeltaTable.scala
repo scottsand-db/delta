@@ -751,10 +751,9 @@ object DeltaTable {
   }
 
   /**
-   * Instantiate a [[DeltaTable]] object using the given table name. If the given
+   * Instantiate a [[DeltaTable]] object using the given table or view name. If the given
    * tableOrViewName is invalid (i.e. either no table exists or an existing table is not a
-   * Delta table), it throws a `not a Delta table` error. Note: Passing a view name will also
-   * result in this error as views are not supported.
+   * Delta table), it throws a `not a Delta table` error.
    *
    * The given tableOrViewName can also be the absolute path of a delta datasource (i.e.
    * delta.`path`), If so, instantiate a [[DeltaTable]] object representing the data at
@@ -772,12 +771,11 @@ object DeltaTable {
   }
 
   /**
-   * Instantiate a [[DeltaTable]] object using the given table name using the given
-   * SparkSession. If the given tableName is invalid (i.e. either no table exists or an
-   * existing table is not a Delta table), it throws a `not a Delta table` error. Note:
-   * Passing a view name will also result in this error as views are not supported.
+   * Instantiate a [[DeltaTable]] object using the given table or view name using the given
+   * SparkSession. If the given tableOrViewName is invalid (i.e. either no table exists or an
+   * existing table is not a Delta table), it throws a `not a Delta table` error.
    *
-   * The given tableName can also be the absolute path of a delta datasource (i.e.
+   * The given tableOrViewName can also be the absolute path of a delta datasource (i.e.
    * delta.`path`), If so, instantiate a [[DeltaTable]] object representing the data at
    * the given path (consistent with the [[forPath]]).
    */

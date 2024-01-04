@@ -29,7 +29,6 @@ import org.apache.spark.sql.delta.schema.SchemaMergingUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
-import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.broadcast.Broadcast
@@ -92,7 +91,6 @@ case class DeltaParquetFileFormat(
         field.copy(metadata = new MetadataBuilder()
           .withMetadata(field.metadata)
           .remove(DeltaColumnMapping.PARQUET_FIELD_ID_METADATA_KEY)
-          .remove(DeltaColumnMapping.PARQUET_FIELD_NESTED_IDS_METADATA_KEY)
           .build())
       }
     } else schema
@@ -214,12 +212,6 @@ case class DeltaParquetFileFormat(
     if (IcebergCompatV1.isEnabled(metadata) || IcebergCompatV2.isEnabled(metadata)) {
       conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
         SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
-    }
-    if (IcebergCompatV2.isEnabled(metadata)) {
-      // For Uniform with IcebergCompatV2, we need to write nested field IDs for list and map
-      // types to the parquet schema. Spark currently does not support it so we hook in our
-      // own write support class.
-      ParquetOutputFormat.setWriteSupportClass(job, classOf[DeltaParquetWriteSupport])
     }
     factory
   }

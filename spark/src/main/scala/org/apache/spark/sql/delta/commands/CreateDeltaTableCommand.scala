@@ -19,12 +19,10 @@ package org.apache.spark.sql.delta.commands
 // scalastyle:off import.ordering.noEmptyLine
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.delta.skipping.clustering.ClusteredTableUtils
 import org.apache.spark.sql.delta._
 import org.apache.spark.sql.delta.DeltaColumnMapping.{dropColumnMappingMetadata, filterColumnMappingProperties}
 import org.apache.spark.sql.delta.actions.{Action, Metadata, Protocol}
 import org.apache.spark.sql.delta.actions.DomainMetadata
-import org.apache.spark.sql.delta.hooks.{UpdateCatalog, UpdateCatalogFactory}
 import org.apache.spark.sql.delta.hooks.IcebergConverterHook
 import org.apache.spark.sql.delta.metering.DeltaLogging
 import org.apache.spark.sql.delta.schema.SchemaUtils
@@ -234,24 +232,14 @@ case class CreateDeltaTableCommand(
       }
       var actions = deltaWriter.write(
         txn,
-        sparkSession,
-        ClusteredTableUtils.getClusterBySpecOptional(table),
-        // Pass this option to the writer so that it can differentiate between an INSERT and a
-        // REPLACE command. This is needed because the writer is shared between the two commands.
-        // But some options, such as dynamic partition overwrite, are only valid for INSERT.
-        // Only allow createOrReplace command which is not a V1 writer.
-        // saveAsTable() command uses this same code path and is marked as a V1 writer.
-        // We do not want saveAsTable() to be treated as a REPLACE command wrt dynamic partition
-        // overwrite.
-        isTableReplace = isReplace && !isV1Writer
+        sparkSession
       )
       // Metadata updates for creating table (with any writer) and replacing table
       // (only with V1 writer) will be handled inside WriteIntoDelta.
       // For createOrReplace operation, metadata updates are handled here if the table already
       // exists (replacing table), otherwise it is handled inside WriteIntoDelta (creating table).
       if (!isV1Writer && isReplace && txn.readVersion > -1L) {
-        val newDomainMetadata = Seq.empty[DomainMetadata] ++
-          ClusteredTableUtils.getDomainMetadataOptional(table, txn)
+        val newDomainMetadata = Seq.empty[DomainMetadata]
         // Ensure to remove any domain metadata for REPLACE TABLE.
         actions = actions ++ DomainMetadataUtils.handleDomainMetadataForReplaceTable(
           txn.snapshot.domainMetadata, newDomainMetadata)
@@ -325,7 +313,7 @@ case class CreateDeltaTableCommand(
         protocol.foreach { protocol =>
           txn.updateProtocol(protocol)
         }
-        ClusteredTableUtils.getDomainMetadataOptional(table, txn).toSeq
+        Nil
       } else {
         verifyTableMetadata(txn, tableWithLocation)
         Nil
@@ -360,10 +348,7 @@ case class CreateDeltaTableCommand(
         val operationTimestamp = System.currentTimeMillis()
         var actionsToCommit = Seq.empty[Action]
         val removes = txn.filterFiles().map(_.removeWithTimestamp(operationTimestamp))
-        actionsToCommit = removes ++
-          DomainMetadataUtils.handleDomainMetadataForReplaceTable(
-            txn.snapshot.domainMetadata,
-            ClusteredTableUtils.getDomainMetadataOptional(table, txn).toSeq)
+        actionsToCommit = removes
         actionsToCommit
     }
 
@@ -381,9 +366,7 @@ case class CreateDeltaTableCommand(
       description = table.comment.orNull,
       schemaString = schemaString,
       partitionColumns = table.partitionColumnNames,
-      // Filter out ephemeral clustering columns config because we don't want to persist
-      // it in delta log. This will be persisted in CatalogTable's table properties instead.
-      configuration = ClusteredTableUtils.removeClusteringColumnsProperty(table.properties),
+      configuration = table.properties,
       createdTime = Some(System.currentTimeMillis()))
   }
 
@@ -551,7 +534,7 @@ case class CreateDeltaTableCommand(
           validateLocation = false)
       case TableCreationModes.Replace | TableCreationModes.CreateOrReplace
           if existingTableOpt.isDefined =>
-        UpdateCatalogFactory.getUpdateCatalogHook(table, spark).updateSchema(spark, snapshot)
+        spark.sessionState.catalog.alterTable(table)
       case TableCreationModes.Replace =>
         val ident = Identifier.of(table.identifier.database.toArray, table.identifier.table)
         throw DeltaErrors.cannotReplaceMissingTableException(ident)
@@ -575,37 +558,13 @@ case class CreateDeltaTableCommand(
       table.storage.copy(properties = Map.empty)
     }
 
-    // If we have to update the catalog, use the correct schema and table properties, otherwise
-    // empty out the schema and property information
-    if (conf.getConf(DeltaSQLConf.DELTA_UPDATE_CATALOG_ENABLED)) {
-      // In the case we're creating a Delta table on an existing path and adopting the schema
-      val schema = if (table.schema.isEmpty) snapshot.schema else table.schema
-      val truncatedSchema = UpdateCatalog.truncateSchemaIfNecessary(schema)
-      val additionalProperties = if (truncatedSchema.isEmpty) {
-        Map(UpdateCatalog.ERROR_KEY -> UpdateCatalog.LONG_SCHEMA_ERROR)
-      } else {
-        Map.empty
-      }
-
-      table.copy(
-        schema = truncatedSchema,
-        // Hive does not allow for the removal of partition columns once stored.
-        // To avoid returning the incorrect schema when the partition columns change,
-        // we store the partition columns as regular data columns.
-        partitionColumnNames = Nil,
-        properties = UpdateCatalog.updatedProperties(snapshot)
-          ++ additionalProperties,
-        storage = storageProps,
-        tracksPartitionsInCatalog = true)
-    } else {
-      table.copy(
-        schema = new StructType(),
-        properties = Map.empty,
-        partitionColumnNames = Nil,
-        // Remove write specific options when updating the catalog
-        storage = storageProps,
-        tracksPartitionsInCatalog = true)
-    }
+    table.copy(
+      schema = new StructType(),
+      properties = Map.empty,
+      partitionColumnNames = Nil,
+      // Remove write specific options when updating the catalog
+      storage = storageProps,
+      tracksPartitionsInCatalog = true)
   }
 
   /**
@@ -659,29 +618,12 @@ case class CreateDeltaTableCommand(
       tableWithLocation: CatalogTable,
       snapshotOpt: Option[Snapshot] = None): OptimisticTransaction = {
     val txn = deltaLog.startTransaction(None, snapshotOpt)
-    validatePrerequisitesForClusteredTable(txn.snapshot.protocol, txn.deltaLog)
 
     // During CREATE/REPLACE, we synchronously run conversion (if Uniform is enabled) so
     // we always remove the post commit hook here.
     txn.unregisterPostCommitHooksWhere(hook => hook.name == IcebergConverterHook.name)
 
     txn
-  }
-
-  /**
-   * Validate pre-requisites for clustered tables for CREATE/REPLACE operations.
-   * @param protocol Protocol used for validations. This protocol should
-   *                 be used during the CREATE/REPLACE commit.
-   * @param deltaLog Delta log used for logging purposes.
-   */
-  private def validatePrerequisitesForClusteredTable(
-      protocol: Protocol,
-      deltaLog: DeltaLog): Unit = {
-    // Validate a clustered table is not replaced by a partitioned table.
-    if (table.partitionColumnNames.nonEmpty &&
-      ClusteredTableUtils.isSupported(protocol)) {
-      throw DeltaErrors.replacingClusteredTableWithPartitionedTableNotAllowed()
-    }
   }
 }
 
