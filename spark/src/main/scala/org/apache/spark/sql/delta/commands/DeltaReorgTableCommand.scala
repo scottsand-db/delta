@@ -24,19 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LeafCommand, LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-object DeltaReorgTableMode extends Enumeration {
-  val PURGE, UNIFORM_ICEBERG = Value
-}
-
-case class DeltaReorgTableSpec(
-    reorgTableMode: DeltaReorgTableMode.Value,
-    icebergCompatVersionOpt: Option[Int]
-)
-
-case class DeltaReorgTable(
-    target: LogicalPlan,
-    reorgTableSpec: DeltaReorgTableSpec = DeltaReorgTableSpec(DeltaReorgTableMode.PURGE, None))(
-    val predicates: Seq[String]) extends UnaryCommand {
+case class DeltaReorgTable(target: LogicalPlan)(val predicates: Seq[String]) extends UnaryCommand {
 
   def child: LogicalPlan = target
 
@@ -49,41 +37,20 @@ case class DeltaReorgTable(
 /**
  * The PURGE command.
  */
-case class DeltaReorgTableCommand(
-    target: LogicalPlan,
-    reorgTableSpec: DeltaReorgTableSpec = DeltaReorgTableSpec(DeltaReorgTableMode.PURGE, None))(
-    val predicates: Seq[String])
-  extends OptimizeTableCommandBase
-  with ReorgTableForUpgradeUniformHelper
-  with LeafCommand
-  with IgnoreCachedData {
+case class DeltaReorgTableCommand(target: LogicalPlan)(val predicates: Seq[String])
+  extends OptimizeTableCommandBase with LeafCommand with IgnoreCachedData {
 
   override val otherCopyArgs: Seq[AnyRef] = predicates :: Nil
 
-  override def optimizeByReorg(
-    sparkSession: SparkSession,
-    isPurge: Boolean,
-    icebergCompatVersion: Option[Int]): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     val command = OptimizeTableCommand(
       target,
       predicates,
       optimizeContext = DeltaOptimizeContext(
-        isPurge = isPurge,
+        isPurge = true,
         minFileSize = Some(0L),
-        maxDeletedRowsRatio = Some(0d),
-        icebergCompatVersion = icebergCompatVersion
-      )
+        maxDeletedRowsRatio = Some(0d))
     )(zOrderBy = Nil)
     command.run(sparkSession)
-  }
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    reorgTableSpec match {
-      case DeltaReorgTableSpec(DeltaReorgTableMode.PURGE, None) =>
-        optimizeByReorg(sparkSession, isPurge = true, icebergCompatVersion = None)
-      case DeltaReorgTableSpec(DeltaReorgTableMode.UNIFORM_ICEBERG, Some(icebergCompatVersion)) =>
-        val table = getDeltaTable(target, "REORG")
-        upgradeUniformIcebergCompatVersion(table, sparkSession, icebergCompatVersion)
-    }
   }
 }
