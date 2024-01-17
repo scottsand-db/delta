@@ -261,7 +261,7 @@ case class CreateDeltaTableCommand(
       (actions, op)
     }
     val updatedConfiguration = UniversalFormat
-      .enforceDependenciesInConfiguration(deltaWriter.configuration, txn.snapshot)
+      .enforceInvariantsAndDependenciesForCTAS(deltaWriter.configuration, txn.snapshot)
     val updatedWriter = deltaWriter.withNewWriterConfiguration(updatedConfiguration)
     // We are either appending/overwriting with saveAsTable or creating a new table with CTAS
     if (!hasBeenExecuted(txn, sparkSession, Some(options))) {
@@ -319,12 +319,8 @@ case class CreateDeltaTableCommand(
         assertPathEmpty(hadoopConf, tableWithLocation)
         // This is a user provided schema.
         // Doesn't come from a query, Follow nullability invariants.
-        var newMetadata =
+        val newMetadata =
           getProvidedMetadata(tableWithLocation, table.schema.json)
-        newMetadata = newMetadata.copy(configuration =
-          UniversalFormat.enforceDependenciesInConfiguration(
-            newMetadata.configuration, txn.snapshot))
-
         txn.updateMetadataForNewTable(newMetadata)
         protocol.foreach { protocol =>
           txn.updateProtocol(protocol)
