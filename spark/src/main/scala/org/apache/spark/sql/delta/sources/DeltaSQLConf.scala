@@ -1045,30 +1045,6 @@ trait DeltaSQLConfBase {
       .booleanConf
       .createWithDefault(false)
 
-  final object NonDeterministicPredicateWidening {
-    final val OFF = "off"
-    final val LOGGING = "logging"
-    final val ON = "on"
-
-    final val list = Set(OFF, LOGGING, ON)
-  }
-
-  val DELTA_CONFLICT_DETECTION_WIDEN_NONDETERMINISTIC_PREDICATES =
-    buildConf("conflictDetection.partitionLevelConcurrency.widenNonDeterministicPredicates")
-      .doc("Whether to widen non-deterministic predicates during partition-level concurrency. " +
-        "Widening can lead to additional conflicts." +
-        "When the value is 'off', non-deterministic predicates are not widened during conflict " +
-        "resolution." +
-        "The value 'logging' will log whether the widening of non-deterministic predicates lead " +
-        "to additional conflicts. The conflict resolution is still done without widening. " +
-        "When the value is 'on', non-deterministic predicates are widened during conflict " +
-        "resolution.")
-      .internal()
-      .stringConf
-      .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(NonDeterministicPredicateWidening.list)
-      .createWithDefault(NonDeterministicPredicateWidening.ON)
-
   val DELTA_UNIFORM_ICEBERG_SYNC_CONVERT_ENABLED =
     buildConf("uniform.iceberg.sync.convert.enabled")
       .doc("If enabled, iceberg conversion will be done synchronously. " +
@@ -1606,17 +1582,6 @@ trait DeltaSQLConfBase {
         "'clusteredTable.numClusteringColumnsLimit' must be positive."
       )
     .createWithDefault(4)
-
-  //////////////////
-  // Delta Sharing
-  //////////////////
-
-  val DELTA_SHARING_ENABLE_DELTA_FORMAT_BATCH =
-    buildConf("spark.sql.delta.sharing.enableDeltaFormatBatch")
-      .doc("Enable delta format sharing in case of issues.")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
 }
 
 object DeltaSQLConf extends DeltaSQLConfBase

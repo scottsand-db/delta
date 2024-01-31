@@ -123,12 +123,10 @@ private[spark] class TestClientForDeltaFormatSharing(
       jsonPredicateHints: Option[String],
       refreshToken: Option[String]
   ): DeltaTableFiles = {
-    val tableFullName = s"${table.share}.${table.schema}.${table.name}"
-    limit.foreach(lim => TestClientForDeltaFormatSharing.limits.put(tableFullName, lim))
-    TestClientForDeltaFormatSharing.requestedFormat.put(tableFullName, responseFormat)
-    jsonPredicateHints.foreach(p =>
-      TestClientForDeltaFormatSharing.jsonPredicateHints.put(tableFullName, p))
-
+    limit.foreach(lim => TestClientForDeltaFormatSharing.limits.put(
+      s"${table.share}.${table.schema}.${table.name}", lim))
+    TestClientForDeltaFormatSharing.requestedFormat.put(
+      s"${table.share}.${table.schema}.${table.name}", responseFormat)
     val iterator = SparkEnv.get.blockManager
       .get[String](getBlockId(table.name, "getFiles", versionAsOf, timestampAsOf))
       .map(_.data.asInstanceOf[Iterator[String]])
@@ -269,5 +267,4 @@ object TestClientForDeltaFormatSharing {
 
   val limits = scala.collection.mutable.Map[String, Long]()
   val requestedFormat = scala.collection.mutable.Map[String, String]()
-  val jsonPredicateHints = scala.collection.mutable.Map[String, String]()
 }

@@ -30,7 +30,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.paths.SparkPath
 import org.apache.spark.util.Utils
 
 trait DeletionVectorStore extends Logging {
@@ -97,14 +96,13 @@ trait DeletionVectorStoreUtils {
     DATA_SIZE_LEN + bitmapDataSize + CHECKSUM_LEN
   }
 
-  /** Convert the given String path to a Hadoop Path. Please make sure the path is not escaped. */
-  def unescapedStringToPath(path: String): Path = SparkPath.fromPathString(path).toPath
-
-  /** Convert the given String path to a Hadoop Path, Please make sure the path is escaped. */
-  def escapedStringToPath(path: String): Path = SparkPath.fromUrlString(path).toPath
+  // scalastyle:off pathfromuri
+  /** Convert the given String path to a Hadoop Path, handing special characters properly. */
+  def stringToPath(path: String): Path = new Path(new URI(path))
+  // scalastyle:on pathfromuri
 
   /** Convert the given Hadoop path to a String Path, handing special characters properly. */
-  def pathToEscapedString(path: Path): String = SparkPath.fromPath(path).urlEncoded
+  def pathToString(path: Path): String = path.toUri.toString
 
   /**
    * Calculate checksum of a serialized deletion vector. We are using CRC32 which has 4bytes size,
@@ -225,7 +223,7 @@ class HadoopFileSystemDVStore(hadoopConf: Configuration)
       }
 
       override val serializedPath: Array[Byte] =
-        DeletionVectorStore.pathToEscapedString(path.path).getBytes(UTF_8)
+        DeletionVectorStore.pathToString(path.path).getBytes(UTF_8)
 
       override def close(): Unit = {
         if (outputStream != null) {
