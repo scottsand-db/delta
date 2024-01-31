@@ -92,10 +92,8 @@ statement
         (WHERE partitionPredicate=predicateToken)?
         (zorderSpec)?                                                   #optimizeTable
     | REORG TABLE table=qualifiedName
-        (
-            (WHERE partitionPredicate=predicateToken)? APPLY LEFT_PAREN PURGE RIGHT_PAREN |
-            APPLY LEFT_PAREN UPGRADE UNIFORM LEFT_PAREN ICEBERG_COMPAT_VERSION EQ version=INTEGER_VALUE RIGHT_PAREN RIGHT_PAREN
-        )                                                               #reorgTable
+        (WHERE partitionPredicate=predicateToken)?
+        APPLY LEFT_PAREN PURGE RIGHT_PAREN                              #reorgTable
     | cloneTableHeader SHALLOW CLONE source=qualifiedName clause=temporalClause?
        (TBLPROPERTIES tableProps=propertyList)?
        (LOCATION location=stringLit)?                                   #clone
@@ -225,7 +223,7 @@ nonReserved
     | CONVERT | TO | DELTA | PARTITIONED | BY
     | DESC | DESCRIBE | LIMIT | DETAIL
     | GENERATE | FOR | TABLE | CHECK | EXISTS | OPTIMIZE
-    | REORG | APPLY | PURGE | UPGRADE | UNIFORM | ICEBERG_COMPAT_VERSION
+    | REORG | APPLY | PURGE
     | RESTORE | AS | OF
     | ZORDER | LEFT_PAREN | RIGHT_PAREN
     | NO | STATISTICS
@@ -262,7 +260,6 @@ FOR: 'FOR';
 GENERATE: 'GENERATE';
 HISTORY: 'HISTORY';
 HOURS: 'HOURS';
-ICEBERG_COMPAT_VERSION: 'ICEBERG_COMPAT_VERSION';
 IF: 'IF';
 LEFT_PAREN: '(';
 LIMIT: 'LIMIT';
@@ -291,8 +288,6 @@ TIMESTAMP: 'TIMESTAMP';
 TRUNCATE: 'TRUNCATE';
 TO: 'TO';
 TRUE: 'TRUE';
-UNIFORM: 'UNIFORM';
-UPGRADE: 'UPGRADE';
 VACUUM: 'VACUUM';
 VERSION: 'VERSION';
 WHERE: 'WHERE';

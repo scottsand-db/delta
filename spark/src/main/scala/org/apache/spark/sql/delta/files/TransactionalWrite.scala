@@ -22,7 +22,6 @@ import org.apache.spark.sql.delta._
 import org.apache.spark.sql.delta.actions._
 import org.apache.spark.sql.delta.commands.cdc.CDCReader
 import org.apache.spark.sql.delta.constraints.{Constraint, Constraints, DeltaInvariantCheckerExec}
-import org.apache.spark.sql.delta.hooks.AutoCompact
 import org.apache.spark.sql.delta.metering.DeltaLogging
 import org.apache.spark.sql.delta.perf.DeltaOptimizedWriterExec
 import org.apache.spark.sql.delta.schema._
@@ -417,7 +416,7 @@ trait TransactionalWrite extends DeltaLogging { self: OptimisticTransactionImpl 
       }
 
       // Iceberg spec requires partition columns in data files
-      val writePartitionColumns = IcebergCompat.isAnyEnabled(metadata)
+      val writePartitionColumns = IcebergCompatV1.isEnabled(metadata)
       // Retain only a minimal selection of Spark writer options to avoid any potential
       // compatibility issues
       val options = (writeOptions match {
@@ -452,7 +451,7 @@ trait TransactionalWrite extends DeltaLogging { self: OptimisticTransactionImpl 
       }
     }
 
-    var resultFiles =
+    val resultFiles =
       (if (optionalStatsTracker.isDefined) {
         committer.addedStatuses.map { a =>
           a.copy(stats = optionalStatsTracker.map(
@@ -473,16 +472,6 @@ trait TransactionalWrite extends DeltaLogging { self: OptimisticTransactionImpl 
       case _ => true
     }
 
-    // add [[AddFile.Tags.ICEBERG_COMPAT_VERSION.name]] tags to addFiles
-    if (IcebergCompatV2.isEnabled(metadata)) {
-      resultFiles = resultFiles.map { addFile =>
-        val tags = if (addFile.tags != null) addFile.tags else Map.empty[String, String]
-        addFile.copy(tags = tags + (AddFile.Tags.ICEBERG_COMPAT_VERSION.name -> "2"))
-      }
-    }
-
-
-    if (resultFiles.nonEmpty && !isOptimize) registerPostCommitHook(AutoCompact)
 
     resultFiles.toSeq ++ committer.changeFiles
   }

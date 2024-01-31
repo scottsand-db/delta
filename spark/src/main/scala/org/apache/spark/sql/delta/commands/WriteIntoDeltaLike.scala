@@ -17,7 +17,6 @@
 package org.apache.spark.sql.delta.commands
 
 // scalastyle:off import.ordering.noEmptyLine
-import org.apache.spark.sql.delta.skipping.clustering.temp.ClusterBySpec
 import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.delta.OptimisticTransaction
 import org.apache.spark.sql.delta.actions.Action
@@ -60,9 +59,8 @@ trait WriteIntoDeltaLike {
    */
   def write(
       txn: OptimisticTransaction,
-      sparkSession: SparkSession,
-      clusterBySpecOpt: Option[ClusterBySpec] = None,
-      isTableReplace: Boolean = false): Seq[Action]
+      sparkSession: SparkSession
+  ): Seq[Action]
 
   val deltaLog: DeltaLog
 

@@ -147,7 +147,7 @@ object DMLWithDeletionVectorsHelper extends DeltaCommand {
   /**
    * Finds the files in nameToAddFileMap in which rows were deleted by checking the row index set.
    */
-  def findFilesWithMatchingRows(
+  private def findFilesWithMatchingRows(
       txn: OptimisticTransaction,
       nameToAddFileMap: Map[String, AddFile],
       matchedFileRowIndexSets: Seq[DeletionVectorResult]): Seq[TouchedFileWithDV] = {
@@ -215,10 +215,8 @@ object DMLWithDeletionVectorsHelper extends DeltaCommand {
       addFilesWithNewDvs: Seq[AddFile],
       snapshot: Snapshot): Seq[AddFile] = {
     import org.apache.spark.sql.delta.implicits._
-
-    if (addFilesWithNewDvs.isEmpty) return Seq.empty
-
-    val selectionPathAndStatsCols = Seq(col("path"), col("stats"))
+    val statsColName = snapshot.getBaseStatsColumnName
+    val selectionPathAndStatsCols = Seq(col("path"), col(statsColName))
     val addFilesWithNewDvsDf = addFilesWithNewDvs.toDF(spark)
 
     // These files originate from snapshot.filesForScan which resets column statistics.
@@ -236,7 +234,6 @@ object DMLWithDeletionVectorsHelper extends DeltaCommand {
     // null count. We want to set the bounds before the AddFile has DV descriptor attached.
     // Attaching the DV descriptor here, causes wrong logical records computation in
     // `updateStatsToWideBounds`.
-    val statsColName = snapshot.getBaseStatsColumnName
     val addFilesWithWideBoundsDf = snapshot
       .updateStatsToWideBounds(addFileWithStatsDf, statsColName)
 
@@ -365,17 +362,14 @@ object DeletionVectorBitmapGenerator {
       tableHasDVs: Boolean,
       targetDf: DataFrame,
       candidateFiles: Seq[AddFile],
-      condition: Expression,
-      fileNameColumnOpt: Option[Column] = None,
-      rowIndexColumnOpt: Option[Column] = None): Seq[DeletionVectorResult] = {
-    val fileNameColumn = fileNameColumnOpt.getOrElse(col(s"${METADATA_NAME}.${FILE_PATH}"))
-    val rowIndexColumn = rowIndexColumnOpt.getOrElse(col(ROW_INDEX_COLUMN_NAME))
+      condition: Expression)
+    : Seq[DeletionVectorResult] = {
     val matchedRowsDf = targetDf
-      .withColumn(FILE_NAME_COL, fileNameColumn)
+      .withColumn(FILE_NAME_COL, col(s"${METADATA_NAME}.${FILE_PATH}"))
       // Filter after getting input file name as the filter might introduce a join and we
       // cannot get input file name on join's output.
       .filter(new Column(condition))
-      .withColumn(ROW_INDEX_COL, rowIndexColumn)
+      .withColumn(ROW_INDEX_COL, col(ROW_INDEX_COLUMN_NAME))
 
     val df = if (tableHasDVs) {
       // When the table already has DVs, join the `matchedRowDf` above to attach for each matched
