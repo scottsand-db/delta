@@ -180,10 +180,7 @@ trait MergeIntoCommandBase extends LeafRunnableCommand
     "scanTimeMs" ->
       createTimingMetric(sc, "time taken to scan the files for matches"),
     "rewriteTimeMs" ->
-      createTimingMetric(sc, "time taken to rewrite the matched files"),
-    "numTargetDeletionVectorsAdded" -> createMetric(sc, "number of deletion vectors added"),
-    "numTargetDeletionVectorsRemoved" -> createMetric(sc, "number of deletion vectors removed"),
-    "numTargetDeletionVectorsUpdated" -> createMetric(sc, "number of deletion vectors updated")
+      createTimingMetric(sc, "time taken to rewrite the matched files")
   )
 
   /**
