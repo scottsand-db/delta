@@ -34,13 +34,13 @@ val all_scala_versions = Seq(scala212, scala213)
 val default_scala_version = settingKey[String]("Default Scala version")
 Global / default_scala_version := scala212
 
-val LATEST_RELEASED_SPARK_VERSION = "3.5.0"
+val LATEST_RELEASED_DELTA_VERSION = "3.2.0"
+val LATEST_RELEASED_SPARK_VERSION = "3.5.1"
 val SPARK_MASTER_VERSION = "4.0.0-SNAPSHOT"
 val sparkVersion = settingKey[String]("Spark version")
 spark / sparkVersion := getSparkVersion()
 
 // Dependent library versions
-val defaultSparkVersion = LATEST_RELEASED_SPARK_VERSION
 val flinkVersion = "1.16.1"
 val hadoopVersion = "3.3.4"
 val scalaTestVersion = "3.2.15"
@@ -314,7 +314,7 @@ lazy val sharing = (project in file("sharing"))
     releaseSettings,
     Test / javaOptions ++= Seq("-ea"),
     libraryDependencies ++= Seq(
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "provided",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "provided",
 
       "io.delta" %% "delta-sharing-client" % "1.0.5",
 
@@ -323,10 +323,10 @@ lazy val sharing = (project in file("sharing"))
       "org.scalatestplus" %% "scalacheck-1-15" % "3.2.9.0" % "test",
       "junit" % "junit" % "4.13.2" % "test",
       "com.novocode" % "junit-interface" % "0.11" % "test",
-      "org.apache.spark" %% "spark-catalyst" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-hive" % defaultSparkVersion % "test" classifier "tests",
+      "org.apache.spark" %% "spark-catalyst" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-hive" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
     )
   ).configureUnidoc()
 
@@ -383,7 +383,6 @@ lazy val kernelDefaults = (project in file("kernel/kernel-defaults"))
   .dependsOn(kernelApi)
   .dependsOn(kernelApi % "test->test")
   .dependsOn(storage)
-  .dependsOn(spark % "test->test")
   .dependsOn(goldenTables % "test")
   .settings(
     name := "delta-kernel-defaults",
@@ -407,10 +406,12 @@ lazy val kernelDefaults = (project in file("kernel/kernel-defaults"))
       "org.openjdk.jmh" % "jmh-core" % "1.37" % "test",
       "org.openjdk.jmh" % "jmh-generator-annprocess" % "1.37" % "test",
 
-      "org.apache.spark" %% "spark-hive" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-catalyst" % defaultSparkVersion % "test" classifier "tests",
+      "io.delta" %% "delta-spark" % LATEST_RELEASED_DELTA_VERSION % "test",
+
+      "org.apache.spark" %% "spark-hive" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-catalyst" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
     ),
     javaCheckstyleSettings("dev/kernel-checkstyle.xml"),
       // Unidoc settings
@@ -463,7 +464,7 @@ lazy val storageS3DynamoDB = (project in file("storage-s3-dynamodb"))
   ).configureUnidoc()
 
 val icebergSparkRuntimeArtifactName = {
- val (expMaj, expMin, _) = getMajorMinorPatch(defaultSparkVersion)
+ val (expMaj, expMin, _) = getMajorMinorPatch(LATEST_RELEASED_SPARK_VERSION)
  s"iceberg-spark-runtime-$expMaj.$expMin"
 }
 
@@ -479,7 +480,7 @@ lazy val testDeltaIcebergJar = (project in file("testDeltaIcebergJar"))
     libraryDependencies ++= Seq(
       "org.apache.hadoop" % "hadoop-client" % hadoopVersion,
       "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
-      "org.apache.spark" %% "spark-core" % defaultSparkVersion % "test"
+      "org.apache.spark" %% "spark-core" % LATEST_RELEASED_SPARK_VERSION % "test"
     )
   )
 
@@ -613,7 +614,7 @@ lazy val hudi = (project in file("hudi"))
         ExclusionRule(organization = "org.apache.hadoop"),
         ExclusionRule(organization = "org.apache.zookeeper"),
       ),
-      "org.apache.spark" %% "spark-avro" % defaultSparkVersion % "test" excludeAll ExclusionRule(organization = "org.apache.hadoop"),
+      "org.apache.spark" %% "spark-avro" % LATEST_RELEASED_SPARK_VERSION % "test" excludeAll ExclusionRule(organization = "org.apache.hadoop"),
       "org.apache.parquet" % "parquet-avro" % "1.12.3" % "compile"
     ),
     assembly / assemblyJarName := s"${name.value}-assembly_${scalaBinaryVersion.value}-${version.value}.jar",
@@ -1091,10 +1092,10 @@ lazy val compatibility = (project in file("connectors/oss-compatibility-tests"))
       "io.netty" % "netty-buffer"  % "4.1.63.Final" % "test",
       "org.scalatest" %% "scalatest" % "3.1.0" % "test",
       "commons-io" % "commons-io" % "2.8.0" % "test",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test",
-      "org.apache.spark" %% "spark-catalyst" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test",
+      "org.apache.spark" %% "spark-catalyst" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
     )
   )
  */
@@ -1109,10 +1110,10 @@ lazy val goldenTables = (project in file("connectors/golden-tables"))
       // Test Dependencies
       "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
       "commons-io" % "commons-io" % "2.8.0" % "test",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test",
-      "org.apache.spark" %% "spark-catalyst" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % defaultSparkVersion % "test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % defaultSparkVersion % "test" classifier "tests"
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test",
+      "org.apache.spark" %% "spark-catalyst" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % LATEST_RELEASED_SPARK_VERSION % "test" classifier "tests"
     )
   )
 
@@ -1135,13 +1136,13 @@ lazy val sqlDeltaImport = (project in file("connectors/sql-delta-import"))
     Test / publishArtifact := false,
     libraryDependencies ++= Seq(
       "io.netty" % "netty-buffer"  % "4.1.63.Final" % "test",
-      "org.apache.spark" % ("spark-sql_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % defaultSparkVersion % "provided",
+      "org.apache.spark" % ("spark-sql_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % LATEST_RELEASED_SPARK_VERSION % "provided",
       "org.rogach" %% "scallop" % "3.5.1",
       "org.scalatest" %% "scalatest" % scalaTestVersionForConnectors % "test",
       "com.h2database" % "h2" % "1.4.200" % "test",
-      "org.apache.spark" % ("spark-catalyst_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % defaultSparkVersion % "test",
-      "org.apache.spark" % ("spark-core_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % defaultSparkVersion % "test",
-      "org.apache.spark" % ("spark-sql_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % defaultSparkVersion % "test"
+      "org.apache.spark" % ("spark-catalyst_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % LATEST_RELEASED_SPARK_VERSION % "test",
+      "org.apache.spark" % ("spark-core_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % LATEST_RELEASED_SPARK_VERSION % "test",
+      "org.apache.spark" % ("spark-sql_" + sqlDeltaImportScalaVersion(scalaBinaryVersion.value)) % LATEST_RELEASED_SPARK_VERSION % "test"
     )
   )
 
