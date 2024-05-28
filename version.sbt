@@ -1,1 +1,1 @@
-ThisBuild / version := "3.0.0+checkpointFix"
+ThisBuild / version := "3.0.0+logging"
