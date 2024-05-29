@@ -52,9 +52,9 @@ class LogSegmentSuite extends FunSuite {
       assert(logSegment.checkpointVersion.contains(1))
       assert(logSegment.checkpoints.size == 2)
       assert(logSegment.getFileInfoString ===
-          s"numDeltas=0, minDeltaVersion=None, maxDeltaVersion=None, " +
-              s"numCheckpointFiles=2, minMultiPartCheckpointPart=Some(1), " +
-              s"maxMultiPartCheckpointPart=Some(2), startingCheckpointVersion=Some(1)")
+        s"numDeltas=0, minDeltaVersion=None, maxDeltaVersion=None, " +
+          s"numCheckpointFiles=2, minMultiPartCheckpointPart=Some(1), " +
+          s"maxMultiPartCheckpointPart=Some(2), startingCheckpointVersion=Some(1)")
     }
   }
 
