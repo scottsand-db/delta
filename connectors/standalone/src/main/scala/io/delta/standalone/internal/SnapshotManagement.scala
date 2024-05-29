@@ -331,18 +331,18 @@ private[internal] case class LogSegment(
       s"startingCheckpointVersion=$checkpointVersion"
   }
 
+  private lazy val deltaVersions = deltas.map(_.getPath).map(FileNames.deltaVersion)
+
   /** visible for testing */
-  private[internal] lazy val minDeltaVersion = if (deltas.isEmpty) {
-    None
-  } else {
-    Some(deltas.map(_.getPath).map(FileNames.deltaVersion).min)
+  private[internal] lazy val minDeltaVersion = deltaVersions match {
+    case Nil => None
+    case list => Some(list.min)
   }
 
   /** visible for testing */
-  private[internal] lazy val maxDeltaVersion = if (deltas.isEmpty) {
-    None
-  } else {
-    Some(deltas.map(_.getPath).map(FileNames.deltaVersion).max)
+  private[internal] lazy val maxDeltaVersion = deltaVersions match {
+    case Nil => None
+    case list => Some(list.max)
   }
 
   private lazy val multiPartCheckpointsParts = checkpoints
