@@ -570,6 +570,7 @@ lazy val kernelApi = (project in file("kernel/kernel-api"))
     javafmtCheckSettings,
     Test / javaOptions ++= Seq("-ea"),
     libraryDependencies ++= Seq(
+      "jakarta.annotation" % "jakarta.annotation-api" % "3.0.0",
       "org.roaringbitmap" % "RoaringBitmap" % "0.9.25",
       "org.slf4j" % "slf4j-api" % "1.7.36",
 
