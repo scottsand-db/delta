@@ -20,6 +20,7 @@ import static io.delta.kernel.internal.TableConfig.TOMBSTONE_RETENTION;
 
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.Snapshot;
+import io.delta.kernel.coordinatedcommits.CommitCoordinatorProvider;
 import io.delta.kernel.engine.CommitCoordinatorClientHandler;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.actions.CommitInfo;
@@ -157,10 +158,11 @@ public class SnapshotImpl implements Snapshot {
         .fromMetadata(engine, metadata)
         .map(
             commitCoordinatorStr -> {
-              CommitCoordinatorClientHandler handler =
-                  engine.getCommitCoordinatorClientHandler(
-                      commitCoordinatorStr,
-                      COORDINATED_COMMITS_COORDINATOR_CONF.fromMetadata(engine, metadata));
+              CommitCoordinatorProvider.getInstance().getCommitCoordinatorClient(
+                  engine,
+                  commitCoordinatorStr,
+                  COORDINATED_COMMITS_COORDINATOR_CONF.fromMetadata(engine, metadata);
+
               return new TableCommitCoordinatorClientHandler(
                   handler,
                   logPath.toString(),
