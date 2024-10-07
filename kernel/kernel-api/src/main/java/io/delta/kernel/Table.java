@@ -16,6 +16,7 @@
 package io.delta.kernel;
 
 import io.delta.kernel.annotation.Evolving;
+import io.delta.kernel.coordinatedcommits.TableIdentifier;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
 import io.delta.kernel.exceptions.KernelException;
@@ -55,6 +56,10 @@ public interface Table {
    */
   static Table forPath(Engine engine, String path) {
     return TableImpl.forPath(engine, path);
+  }
+
+  static Table forPathWithTableId(Engine engine, String path, TableIdentifier tid) {
+    return null;
   }
 
   /**
