@@ -1,10 +1,13 @@
 package io.delta.kernel.coordinatedcommits;
 
-import io.delta.kernel.engine.Engine;
 import java.util.Map;
 
-public interface CommitCoordinatorBuilder {
-  String getName();
+public abstract class CommitCoordinatorBuilder {
+  public CommitCoordinatorBuilder() { }
 
-  CommitCoordinatorClient build(Engine engine, Map<String, String> commitCoordinatorConf);
+  public abstract String getName();
+
+  public abstract CommitCoordinatorClient build(
+      Map<String, String> systemConf,
+      Map<String, String> commitCoordinatorConf);
 }

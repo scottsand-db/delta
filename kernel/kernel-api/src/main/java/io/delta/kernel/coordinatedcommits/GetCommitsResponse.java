@@ -19,8 +19,7 @@ package io.delta.kernel.coordinatedcommits;
 import java.util.List;
 
 /**
- * Response container for
- * {@link CommitCoordinatorClient#getCommits(TableDescriptor, Long, Long)}.
+ * Response container for {@link CommitCoordinatorClient#getCommits}.
  */
 public class GetCommitsResponse {
 

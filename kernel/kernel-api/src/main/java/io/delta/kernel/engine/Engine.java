@@ -17,6 +17,8 @@
 package io.delta.kernel.engine;
 
 import io.delta.kernel.annotation.Evolving;
+import io.delta.kernel.coordinatedcommits.CommitCoordinatorClient;
+import java.util.Map;
 
 /**
  * Interface encapsulating all clients needed by the Delta Kernel in order to read the Delta table.
@@ -54,4 +56,9 @@ public interface Engine {
    * @return An implementation of {@link ParquetHandler}.
    */
   ParquetHandler getParquetHandler();
+
+  CommitCoordinatorClient getCommitCoordinatorClient(
+      String commitCoordinatorName,
+      Map<String, String> commitCoordinatorConf);
 }
+

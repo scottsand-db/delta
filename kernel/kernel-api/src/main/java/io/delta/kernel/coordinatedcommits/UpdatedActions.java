@@ -16,9 +16,9 @@
 
 package io.delta.kernel.coordinatedcommits;
 
-import io.delta.storage.commit.actions.AbstractCommitInfo;
-import io.delta.storage.commit.actions.AbstractMetadata;
-import io.delta.storage.commit.actions.AbstractProtocol;
+import io.delta.kernel.coordinatedcommits.actions.AbstractCommitInfo;
+import io.delta.kernel.coordinatedcommits.actions.AbstractMetadata;
+import io.delta.kernel.coordinatedcommits.actions.AbstractProtocol;
 
 /**
  * A container class to inform the CommitCoordinatorClient about any changes in Protocol/Metadata

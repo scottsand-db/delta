@@ -85,4 +85,8 @@ public interface FileSystemClient {
    * @throws IOException for any IO error.
    */
   boolean delete(String path) throws IOException;
+
+  boolean exists(String path) throws IOException;
+
+  FileStatus getFileStatus(String path) throws IOException;
 }
