@@ -93,7 +93,7 @@ public class TableImpl implements Table {
     this.tablePath = tablePath;
     final Path dataPath = new Path(tablePath);
     final Path logPath = new Path(dataPath, "_delta_log");
-    this.snapshotManager = new SnapshotManager(logPath, dataPath);
+    this.snapshotManager = new SnapshotManager(logPath, dataPath, configProvider, tableIdOpt);
     this.clock = clock;
     this.configProvider = configProvider;
     this.tableIdOpt = tableIdOpt;

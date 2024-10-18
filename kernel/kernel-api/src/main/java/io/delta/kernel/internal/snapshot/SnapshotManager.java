@@ -28,6 +28,7 @@ import static io.delta.kernel.internal.util.Preconditions.checkArgument;
 import static java.lang.String.format;
 
 import io.delta.kernel.*;
+import io.delta.kernel.config.ConfigurationProvider;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.engine.coordinatedcommits.Commit;
 import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
@@ -66,11 +67,19 @@ public class SnapshotManager {
 
   private final Path logPath;
   private final Path tablePath;
+  private final ConfigurationProvider configProvider;
+  private final Optional<TableIdentifier> tableIdOpt;
 
-  public SnapshotManager(Path logPath, Path tablePath) {
+  public SnapshotManager(
+      Path logPath,
+      Path tablePath,
+      ConfigurationProvider configProvider,
+      Optional<TableIdentifier> tableIdOpt) {
     this.latestSnapshotHint = new AtomicReference<>();
     this.logPath = logPath;
     this.tablePath = tablePath;
+    this.configProvider = configProvider;
+    this.tableIdOpt = tableIdOpt;
   }
 
   private static final Logger logger = LoggerFactory.getLogger(SnapshotManager.class);
@@ -361,7 +370,7 @@ public class SnapshotManager {
     // in delta versions if some delta files are backfilled after the log directory listing but
     // before the unbackfilled commits listing
     List<Commit> unbackfilledCommits =
-        getUnbackfilledCommits(tableCommitHandlerOpt, startVersion, versionToLoad);
+        getUnbackfilledCommits(engine, tableCommitHandlerOpt, startVersion, versionToLoad);
 
     final AtomicLong maxDeltaVersionSeen = new AtomicLong(startVersion - 1);
     Optional<CloseableIterator<FileStatus>> listing = listFromOrNone(engine, startVersion);
@@ -438,18 +447,19 @@ public class SnapshotManager {
   }
 
   private List<Commit> getUnbackfilledCommits(
+      Engine engine,
       Optional<TableCommitCoordinatorClientHandler> tableCommitHandlerOpt,
       long startVersion,
       Optional<Long> versionToLoad) {
     try {
       return tableCommitHandlerOpt
           .map(
-              commitCoordinatorClientHandler -> {
+              tableCommitCoordinatorClientHandler -> {
                 logger.info(
                     "Getting un-backfilled commits from commit coordinator for " + "table: {}",
                     tablePath);
-                return commitCoordinatorClientHandler
-                    .getCommits(startVersion, versionToLoad.orElse(null))
+                return tableCommitCoordinatorClientHandler
+                    .getCommits(engine, startVersion, versionToLoad.orElse(null))
                     .getCommits();
               })
           .orElse(Collections.emptyList());
@@ -536,7 +546,13 @@ public class SnapshotManager {
 
     final SnapshotImpl snapshot =
         new SnapshotImpl(
-            tablePath, initSegment, logReplay, logReplay.getProtocol(), logReplay.getMetadata());
+            tablePath,
+            initSegment,
+            logReplay,
+            logReplay.getProtocol(),
+            logReplay.getMetadata(),
+            configProvider,
+            tableIdOpt);
 
     logger.info(
         "{}: Took {}ms to construct the snapshot (loading protocol and metadata) for {} {}",

@@ -20,7 +20,10 @@ import static io.delta.kernel.internal.TableConfig.TOMBSTONE_RETENTION;
 
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.Snapshot;
-import io.delta.kernel.engine.CommitCoordinatorClientHandler;
+import io.delta.kernel.TableIdentifier;
+import io.delta.kernel.config.ConfigurationProvider;
+import io.delta.kernel.coordinatedcommits.TableDescriptor;
+import io.delta.kernel.engine.CommitCoordinatorClient;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.actions.CommitInfo;
 import io.delta.kernel.internal.actions.Metadata;
@@ -38,10 +41,12 @@ public class SnapshotImpl implements Snapshot {
   private final Path logPath;
   private final Path dataPath;
   private final long version;
+  private final LogSegment logSegment;
   private final LogReplay logReplay;
   private final Protocol protocol;
   private final Metadata metadata;
-  private final LogSegment logSegment;
+  private final ConfigurationProvider configProvider;
+  private final Optional<TableIdentifier> tableIdOpt;
   private Optional<Long> inCommitTimestampOpt;
 
   public SnapshotImpl(
@@ -49,7 +54,9 @@ public class SnapshotImpl implements Snapshot {
       LogSegment logSegment,
       LogReplay logReplay,
       Protocol protocol,
-      Metadata metadata) {
+      Metadata metadata,
+      ConfigurationProvider configProvider,
+      Optional<TableIdentifier> tableIdOpt) {
     this.logPath = new Path(dataPath, "_delta_log");
     this.dataPath = dataPath;
     this.version = logSegment.version;
@@ -57,6 +64,8 @@ public class SnapshotImpl implements Snapshot {
     this.logReplay = logReplay;
     this.protocol = protocol;
     this.metadata = metadata;
+    this.configProvider = configProvider;
+    this.tableIdOpt = tableIdOpt;
     this.inCommitTimestampOpt = Optional.empty();
   }
 
@@ -156,15 +165,20 @@ public class SnapshotImpl implements Snapshot {
     return COORDINATED_COMMITS_COORDINATOR_NAME
         .fromMetadata(engine, metadata)
         .map(
-            commitCoordinatorStr -> {
-              CommitCoordinatorClientHandler handler =
-                  engine.getCommitCoordinatorClientHandler(
-                      commitCoordinatorStr,
+            ccName -> {
+              final CommitCoordinatorClient client =
+                  engine.getCommitCoordinatorClient(
+                      ccName,
+                      configProvider,
                       COORDINATED_COMMITS_COORDINATOR_CONF.fromMetadata(engine, metadata));
-              return new TableCommitCoordinatorClientHandler(
-                  handler,
-                  logPath.toString(),
-                  COORDINATED_COMMITS_TABLE_CONF.fromMetadata(engine, metadata));
+
+              final TableDescriptor tableDescriptor =
+                  new TableDescriptor(
+                      logPath.toString(),
+                      tableIdOpt,
+                      COORDINATED_COMMITS_TABLE_CONF.fromMetadata(engine, metadata));
+
+              return new TableCommitCoordinatorClientHandler(client, tableDescriptor);
             });
   }
 }
