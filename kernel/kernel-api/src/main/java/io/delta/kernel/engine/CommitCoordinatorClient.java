@@ -38,7 +38,7 @@ import java.util.Map;
  * <ul>
  *   <li>{@link #registerTable}: Determine the table config during commit coordinator registration.
  *   <li>{@link #commit}: Commit a new version of the table.
- *   <li>{@link #getUnbackfilledCommits}: Tracks and returns unbackfilled commits.
+ *   <li>{@link #getCommits}: Tracks and returns unbackfilled commits.
  *   <li>{@link #backfillToVersion}: Ensure that commits are backfilled if/when needed.
  * </ul>
  *
@@ -111,6 +111,8 @@ public interface CommitCoordinatorClient {
       throws CommitFailedException;
 
   /**
+   * TODO: rename this to getUnbackfilledCommits
+   *
    * API to get the unbackfilled commits for the table represented by the given tableDescriptor.
    * Commits older than startVersion (if given) or newer than endVersion (if given) are ignored. The
    * returned commits are contiguous and in ascending version order.
@@ -133,7 +135,7 @@ public interface CommitCoordinatorClient {
    *     io.delta.kernel.engine.coordinatedcommits.Commit}s and the latestTableVersion which is
    *     tracked by the {@link CommitCoordinatorClient}.
    */
-  GetCommitsResponse getUnbackfilledCommits(
+  GetCommitsResponse getCommits(
       Engine engine,
       TableDescriptor tableDescriptor,
       @Nullable Long startVersion,
