@@ -143,7 +143,7 @@ public final class DeltaErrors {
   public static KernelException unknownCommitCoordinator(String ccName, String ccBuilderConfKey) {
     return new KernelException(
         String.format(
-            "Unknown commit coordinator: '%s'. Please ensure that session configuration '%s' is set.",
+            "Unknown commit coordinator: '%s'. Please ensure that session config '%s' is set.",
             ccName, ccBuilderConfKey));
   }
 

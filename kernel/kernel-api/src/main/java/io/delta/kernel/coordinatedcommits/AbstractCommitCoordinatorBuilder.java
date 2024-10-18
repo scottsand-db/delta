@@ -26,6 +26,5 @@ public abstract class AbstractCommitCoordinatorBuilder {
   public abstract String getName();
 
   public abstract CommitCoordinatorClient build(
-      ConfigurationProvider sessionConfig,
-      Map<String, String> commitCoordinatorConf);
+      ConfigurationProvider sessionConfig, Map<String, String> commitCoordinatorConf);
 }

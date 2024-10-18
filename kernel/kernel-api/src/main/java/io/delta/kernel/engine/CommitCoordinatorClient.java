@@ -113,7 +113,7 @@ public interface CommitCoordinatorClient {
   /**
    * TODO: rename this to getUnbackfilledCommits
    *
-   * API to get the unbackfilled commits for the table represented by the given tableDescriptor.
+   * <p>API to get the unbackfilled commits for the table represented by the given tableDescriptor.
    * Commits older than startVersion (if given) or newer than endVersion (if given) are ignored. The
    * returned commits are contiguous and in ascending version order.
    *

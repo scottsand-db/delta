@@ -27,7 +27,6 @@ import io.delta.kernel.engine.coordinatedcommits.GetCommitsResponse;
 import io.delta.kernel.engine.coordinatedcommits.UpdatedActions;
 import io.delta.kernel.utils.CloseableIterator;
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * TODO: re-think if we really need this.
