@@ -15,7 +15,9 @@
  */
 package io.delta.kernel.defaults.engine;
 
+import io.delta.kernel.config.ConfigurationProvider;
 import io.delta.kernel.engine.*;
+import io.delta.kernel.utils.CommitCoordinatorUtils;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 
@@ -48,9 +50,14 @@ public class DefaultEngine implements Engine {
   }
 
   @Override
-  public CommitCoordinatorClientHandler getCommitCoordinatorClientHandler(
-      String name, Map<String, String> conf) {
-    return new DefaultCommitCoordinatorClientHandler(hadoopConf, name, conf);
+  public CommitCoordinatorClient getCommitCoordinatorClient(
+      String commitCoordinatorName,
+      ConfigurationProvider sessionConfig,
+      Map<String, String> commitCoordinatorConf) {
+    // TODO: set io.delta.kernel.commitCoordinatorBuilder.unity-catalog.impl =
+    //   io.delta.kernel.coordinatedcommits.UnityCatalogCommitCoordinatorBuilder
+    return CommitCoordinatorUtils.getCommitCoordinatorClient(
+        commitCoordinatorName, sessionConfig, commitCoordinatorConf);
   }
 
   /**
