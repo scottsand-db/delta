@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Response container for {@link io.delta.kernel.engine.CommitCoordinatorClientHandler#getCommits(
+ * Response container for {@link io.delta.kernel.engine.CommitCoordinatorClient#getCommits}.
  * String, Map, Long, Long)}. Holds all the commits that have not been backfilled as per the commit
  * coordinator.
  *
