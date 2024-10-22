@@ -26,13 +26,13 @@ import io.delta.kernel.defaults.engine.DefaultCommitCoordinatorClientHandler
 import io.delta.kernel.engine.Engine
 import io.delta.kernel.internal.{SnapshotImpl, TableConfig}
 import io.delta.kernel.internal.actions.{CommitInfo, Metadata, Protocol, SingleAction}
-import io.delta.kernel.internal.actions.SingleAction.{createMetadataSingleAction, FULL_SCHEMA}
+import io.delta.kernel.internal.actions.SingleAction.{FULL_SCHEMA, createMetadataSingleAction}
 import io.delta.kernel.internal.fs.{Path => KernelPath}
 import io.delta.kernel.internal.snapshot.{SnapshotManager, TableCommitCoordinatorClientHandler}
 import io.delta.kernel.internal.util.{CoordinatedCommitsUtils, FileNames}
 import io.delta.kernel.internal.util.Preconditions.checkArgument
 import io.delta.kernel.internal.util.Utils.{closeCloseables, singletonCloseableIterator, toCloseableIterator}
-import io.delta.kernel.utils.{CloseableIterator, FileStatus}
+import io.delta.kernel.utils.{CloseableIterator, CommitCoordinatorUtils, FileStatus}
 import io.delta.storage.commit.{CommitCoordinatorClient, CommitResponse, GetCommitsResponse, InMemoryCommitCoordinator, TableDescriptor, TableIdentifier, UpdatedActions, CoordinatedCommitsUtils => CCU}
 import io.delta.storage.commit.actions.{AbstractMetadata, AbstractProtocol}
 import io.delta.storage.LogStore
@@ -49,7 +49,7 @@ class CoordinatedCommitsSuite extends DeltaTableWriteSuiteBase
   with CoordinatedCommitsTestUtils {
 
   private val trackingInMemoryBatchSize10Config = Map(
-    CommitCoordinatorProvider.getCommitCoordinatorNameConfKey("tracking-in-memory") ->
+    CommitCoordinatorUtils.getCommitCoordinatorBuilderConfKey("tracking-in-memory") ->
       classOf[TrackingInMemoryCommitCoordinatorBuilder].getName,
     InMemoryCommitCoordinatorBuilder.BATCH_SIZE_CONF_KEY -> "10")
 
@@ -67,7 +67,7 @@ class CoordinatedCommitsSuite extends DeltaTableWriteSuiteBase
     val versionToDelete = math.max(versionConvertToCC + 1, deleteVersion)
 
     val handler =
-      engine.getCommitCoordinatorClientHandler(
+      engine.getCommitCoordinatorClient(
         coordinatorName, OBJ_MAPPER.readValue(coordinatorConf, classOf[util.Map[String, String]]))
     val logPath = new Path("file:" + tablePath, "_delta_log")
     val tableSpark = Table.forPath(engine, tablePath)

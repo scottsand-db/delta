@@ -18,7 +18,7 @@ package io.delta.kernel.defaults
 
 import java.io.File
 import io.delta.kernel.Table
-import io.delta.kernel.engine.{CommitCoordinatorClientHandler, Engine, ExpressionHandler, FileSystemClient}
+import io.delta.kernel.engine.{CommitCoordinatorClient, Engine, ExpressionHandler, FileSystemClient}
 import io.delta.kernel.data.ColumnarBatch
 import io.delta.kernel.defaults.engine.{DefaultEngine, DefaultJsonHandler, DefaultParquetHandler}
 import io.delta.kernel.expressions.Predicate
@@ -367,7 +367,7 @@ class MetricsEngine(config: Configuration) extends Engine {
 
   override def getParquetHandler: MetricsParquetHandler = parquetHandler
 
-  override def getCommitCoordinatorClientHandler(name: String, conf: util.Map[String, String]):
+  override def getCommitCoordinatorClient(name: String, conf: util.Map[String, String]):
   CommitCoordinatorClientHandler = impl.getCommitCoordinatorClientHandler(name, conf)
 }
 

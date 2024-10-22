@@ -70,6 +70,11 @@ public class SnapshotManager {
   private final ConfigurationProvider configProvider;
   private final Optional<TableIdentifier> tableIdOpt;
 
+  /** Visible for testing */
+  public SnapshotManager(Path logPath, Path tablePath) {
+    this(logPath, tablePath, new EmptyConfigurationProvider(), Optional.empty());
+  }
+
   public SnapshotManager(
       Path logPath,
       Path tablePath,

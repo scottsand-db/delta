@@ -28,8 +28,7 @@ public class CommitCoordinatorUtils {
 
   public static CommitCoordinatorClient getCommitCoordinatorClient(
       String ccName, ConfigurationProvider sessionConfig, Map<String, String> ccConf) {
-    final String builderConfKey =
-        String.format("io.delta.kernel.commitCoordinatorBuilder.%s.impl", ccName);
+    final String builderConfKey = getCommitCoordinatorBuilderConfKey(ccName);
 
     if (!sessionConfig.contains(builderConfKey)) {
       throw DeltaErrors.unknownCommitCoordinator(ccName, builderConfKey);
@@ -50,5 +49,9 @@ public class CommitCoordinatorUtils {
         | InvocationTargetException e) {
       throw DeltaErrors.couldNotInstantiateCommitCoordinatorClient(ccName, builderClassName, e);
     }
+  }
+
+  public static String getCommitCoordinatorBuilderConfKey(String ccName) {
+    return String.format("io.delta.kernel.commitCoordinatorBuilder.%s.impl", ccName);
   }
 }
