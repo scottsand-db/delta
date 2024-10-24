@@ -133,7 +133,7 @@ public interface CommitCoordinatorClient {
    *     io.delta.kernel.engine.coordinatedcommits.Commit}s and the latestTableVersion which is
    *     tracked by the {@link CommitCoordinatorClient}.
    */
-  GetCommitsResponse getUnbackfilledCommits(
+  GetCommitsResponse getCommits(
       Engine engine,
       TableDescriptor tableDescriptor,
       @Nullable Long startVersion,
