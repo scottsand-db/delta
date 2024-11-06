@@ -561,6 +561,19 @@ lazy val sharing = (project in file("sharing"))
     )
   ).configureUnidoc()
 
+lazy val kernelSpark = (project in file("kernel_spark"))
+  .dependsOn(kernelApi)
+  .dependsOn(kernelDefaults)
+  .settings(
+    name := "delta-kernel-spark",
+    commonSettings,
+    Test / javaOptions ++= Seq("-ea"),
+    libraryDependencies ++= Seq(
+      "org.apache.spark" %% "spark-core" % "3.5.1" % "provided",
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "provided"
+    )
+  )
+
 lazy val kernelApi = (project in file("kernel/kernel-api"))
   .settings(
     name := "delta-kernel-api",
