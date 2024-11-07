@@ -29,7 +29,7 @@ import java.util.*;
 import java.util.stream.IntStream;
 
 public class TransactionStateRow extends GenericRow {
-  private static final StructType SCHEMA =
+  public static final StructType SCHEMA =
       new StructType()
           .add("logicalSchemaString", StringType.STRING)
           .add("partitionColumns", new ArrayType(StringType.STRING, false /* containsNull */))

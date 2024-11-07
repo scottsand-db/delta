@@ -1,25 +1,36 @@
+package io.delta
+
+import io.delta.kernel.exceptions.TableNotFoundException
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 class DeltaTable(path: String) extends Table with SupportsWrite {
+  import io.delta.DeltaTable._
+
   private lazy val engine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
 
   private lazy val table =
     io.delta.kernel.Table.forPath(engine, path)
 
-  private lazy val spark = SparkSession.active()
-
   override def name(): String = s"delta.`$path`"
 
   override def schema(): StructType = {
-    SchemaUtils.convertKernelSchemaToSparkSchema(
-      table.getLatestSnapshot(engine).getSchema(engine))
+    try {
+      val schema = SchemaUtils.convertKernelSchemaToSparkSchema(
+        table.getLatestSnapshot(engine).getSchema(engine))
+      logger.info(s"schema: $schema")
+      schema
+    } catch {
+      case e: TableNotFoundException =>
+        logger.warn("schema: Table not found", e)
+        logger.warn("schema: Returning empty struct")
+        new StructType()
+    }
   }
 
   override def capabilities(): java.util.Set[TableCapability] = {
@@ -27,6 +38,11 @@ class DeltaTable(path: String) extends Table with SupportsWrite {
   }
 
   override def newWriteBuilder(writeInfo: LogicalWriteInfo): WriteBuilder = {
+    logger.info(s"newWriteBuilder: writeInfo=$writeInfo")
     new DeltaWriteBuilder(table, writeInfo)
   }
+}
+
+object DeltaTable {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }

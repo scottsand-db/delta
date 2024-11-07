@@ -564,13 +564,25 @@ lazy val sharing = (project in file("sharing"))
 lazy val kernelSpark = (project in file("kernel_spark"))
   .dependsOn(kernelApi)
   .dependsOn(kernelDefaults)
+  .dependsOn(spark % "test->test")
   .settings(
     name := "delta-kernel-spark",
     commonSettings,
-    Test / javaOptions ++= Seq("-ea"),
+
+    Test / javaOptions ++= Seq(
+      "-ea",
+      s"-Dlog4j.configuration=file:${baseDirectory.value}/src/test/resources/log4j.properties"
+    ),
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core" % "3.5.1" % "provided",
-      "org.apache.spark" %% "spark-sql" % "3.5.1" % "provided"
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "provided",
+
+      // Test deps
+      "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
+      "org.apache.spark" %% "spark-catalyst" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-hive" % "3.5.1" % "test" classifier "tests"
     )
   )
 

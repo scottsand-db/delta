@@ -1,8 +1,9 @@
-import io.delta.kernel.types.{DataType => KernelDataType, StructField => KernelStructField, StructType => KernelStructType, StringType => KernelStringType, BooleanType => KernelBooleanType, IntegerType => KernelIntegerType, LongType => KernelLongType}
+package io.delta
 
-import org.apache.spark.sql.types.{DataType => SparkDataType, StructType => SparkStructType, StructField => SparkStructField, StringType => SparkStringType, BooleanType => SparkBooleanType, IntegerType => SparkIntegerType, LongType => SparkLongType}
+import io.delta.kernel.types.{BooleanType => KernelBooleanType, DataType => KernelDataType, IntegerType => KernelIntegerType, LongType => KernelLongType, StringType => KernelStringType, StructField => KernelStructField, StructType => KernelStructType}
+import org.apache.spark.sql.types.{BooleanType => SparkBooleanType, DataType => SparkDataType, IntegerType => SparkIntegerType, LongType => SparkLongType, StringType => SparkStringType, StructField => SparkStructField, StructType => SparkStructType}
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 object SchemaUtils {
 
