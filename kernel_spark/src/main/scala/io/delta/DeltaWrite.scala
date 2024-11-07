@@ -1,6 +1,6 @@
 package io.delta
 
-import io.delta.kernel.data.{ColumnVector, FilteredColumnarBatch, Row => KernelRow}
+import io.delta.kernel.data.{ColumnVector, FilteredColumnarBatch}
 import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch
 import io.delta.kernel.defaults.internal.json.JsonUtils
 import io.delta.kernel.expressions.Literal
@@ -15,6 +15,8 @@ import org.apache.spark.sql.connector.write._
 
 import java.util.UUID
 import scala.reflect.ClassTag
+
+import scala.collection.JavaConverters._
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -186,18 +188,18 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
   private val writerId = UUID.randomUUID().toString.substring(0, 5)
   private val engine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
-  private val partitionValues = new java.util.HashMap[String, Literal]()
   private val txnStateRow =
     JsonUtils.rowFromJson(txnStateRowSerialized, TransactionStateRow.SCHEMA)
+  private val partitionColNames = TransactionStateRow.getPartitionColumnsList(txnStateRow)
   private val targetTableSchemaButNotTheWriteSchema =
     TransactionStateRow.getLogicalSchema(engine, txnStateRow)
-  private val txnWriteContext =
-    KernelTransaction.getWriteContext(engine, txnStateRow, partitionValues)
-  private val writeRecordBuffer = scala.collection.mutable.ArrayBuffer[InternalRow]()
+  private val partitionedWriteRecordBuffer = scala.collection.mutable
+    .Map[Map[String, Literal], scala.collection.mutable.ArrayBuffer[InternalRow]]()
 
   logger.info(
     s"DeltaBatchDataWriter created: partitionId=$partitionId, taskId=$taskId," +
-      s"writerId=$writerId, schema=$targetTableSchemaButNotTheWriteSchema")
+      s"writerId=$writerId, schema=$targetTableSchemaButNotTheWriteSchema, " +
+      s"partitionColNames=$partitionColNames")
 
   /////////////////
   // Public APIs //
@@ -206,25 +208,53 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
   override def write(record: InternalRow): Unit = {
     val recordToWrite = record.copy()
 
-    writeRecordBuffer.append(recordToWrite)
+    val partitionValues = DataUtils.sparkRowToKernelPartitionValues(
+      record,
+      targetTableSchemaButNotTheWriteSchema,
+      partitionColNames.asScala)
+
+    partitionedWriteRecordBuffer
+      .getOrElseUpdate(partitionValues, scala.collection.mutable.ArrayBuffer[InternalRow]())
+      .append(recordToWrite)
 
     logger.info(
-      s"write[$writerId]: record=$recordToWrite," +
-        s"writeRecordBuffer.size=${writeRecordBuffer.size}, " +
-        s"writeRecordBuffer=${writeRecordBuffer.mkString(", ")}")
+      s"write[$writerId]: record=$recordToWrite, partitionValues=$partitionValues, " +
+        s"partitionedWriteRecordBuffer(partitionValues).size=" +
+        s"${partitionedWriteRecordBuffer(partitionValues).size}, " +
+        s"partitionedWriteRecordBuffer(partitionValues)=" +
+        s"${partitionedWriteRecordBuffer(partitionValues)}")
   }
 
   override def commit(): WriterCommitMessage = {
     logger.info(s"commit[$writerId]")
 
-    val logicalData = sparkRecordBufferToKernelColumnarBatchIter()
+    val serializedDataActionsArray = partitionedWriteRecordBuffer.flatMap {
+      case (partitionValues, arrayBufferData) =>
+        commitSinglePartition(partitionValues.asJava, arrayBufferData.toArray)
+    }.toArray
 
-    logger.info(s"commit[$writerId] > logicalData: $logicalData")
+    partitionedWriteRecordBuffer.clear()
+
+    new DeltaWriterCommitMessage(serializedDataActionsArray)
+  }
+
+  private def commitSinglePartition(
+      partitionValues: java.util.Map[String, Literal],
+      partitionArrayData: Array[InternalRow]): Array[String] = {
+    logger.info(s"commitSinglePartition[$writerId]: partitionValues=$partitionValues")
+
+    val logicalData =
+      sparkRecordBufferToKernelColumnarBatchIter(partitionArrayData)
+
+    logger.info(s"commitSinglePartition[$writerId] > logicalData: $logicalData")
 
     val physicalData =
       KernelTransaction.transformLogicalData(engine, txnStateRow, logicalData, partitionValues)
 
-    logger.info(s"commit[$writerId] > physicalData: $physicalData")
+    logger.info(s"commitSinglePartition[$writerId] > physicalData: $physicalData")
+
+    val txnWriteContext =
+      KernelTransaction.getWriteContext(engine, txnStateRow, partitionValues)
 
     val dataFiles = engine
       .getParquetHandler()
@@ -244,7 +274,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
       s"commit[$writerId] > serializedDataActionsArray:" +
         s"${serializedDataActionsArray.mkString("\n- ", "\n- ", "")}")
 
-    new DeltaWriterCommitMessage(serializedDataActionsArray)
+    serializedDataActionsArray
   }
 
   override def abort(): Unit = {
@@ -259,14 +289,12 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
   // Private Helper Methods //
   ////////////////////////////
 
-  private def sparkRecordBufferToKernelColumnarBatchIter()
-      : CloseableIterator[FilteredColumnarBatch] = {
-    val arrayData = writeRecordBuffer.toArray
-    logger.info(s"arrayData: ${arrayData.map(_.toString).mkString(", ")}")
-    writeRecordBuffer.clear()
-    logger.info(s"arrayData: ${arrayData.map(_.toString).mkString(", ")}")
+  private def sparkRecordBufferToKernelColumnarBatchIter(
+      partitionArrayData: Array[InternalRow]): CloseableIterator[FilteredColumnarBatch] = {
+    logger.info(s"arrayData: ${partitionArrayData.map(_.toString).mkString(", ")}")
+    logger.info(s"arrayData: ${partitionArrayData.map(_.toString).mkString(", ")}")
     val numColumns = targetTableSchemaButNotTheWriteSchema.length()
-    val size = arrayData.length
+    val size = partitionArrayData.length
 
     logger.info(
       s"sparkRecordBufferToKernelColumnarBatchIter :: numColumns = $numColumns, size = $size")
@@ -276,7 +304,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
     for (i <- 0 until numColumns) {
       columnVectors(i) = targetTableSchemaButNotTheWriteSchema.at(i).getDataType match {
         case x: IntegerType =>
-          new AbstractVectorWrapper(x, arrayData, colIdx = i) {
+          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created IntegerType Vector Wrapper: coldIdx = $colIdx")
 
             override def getInt(rowId: Int): Int = {
@@ -287,7 +315,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: StringType =>
-          new AbstractVectorWrapper(x, arrayData, colIdx = i) {
+          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created StringType Vector Wrapper: coldIdx = $colIdx")
 
             override def getString(rowId: Int): String = {
@@ -298,7 +326,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: BooleanType =>
-          new AbstractVectorWrapper(x, arrayData, colIdx = i) {
+          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created BooleanType Vector Wrapper: coldIdx = $colIdx")
 
             override def getBoolean(rowId: Int): Boolean = {
@@ -309,7 +337,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: LongType =>
-          new AbstractVectorWrapper(x, arrayData, colIdx = i) {
+          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created LongType Vector Wrapper: coldIdx = $colIdx")
 
             override def getLong(rowId: Int): Long = {

@@ -1,8 +1,11 @@
 package io.delta
 
 import io.delta.kernel.exceptions.TableNotFoundException
+import io.delta.kernel.internal.SnapshotImpl
+import io.delta.kernel.internal.util.VectorUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 
@@ -40,6 +43,17 @@ class DeltaTable(path: String) extends Table with SupportsWrite {
   override def newWriteBuilder(writeInfo: LogicalWriteInfo): WriteBuilder = {
     logger.info(s"newWriteBuilder: writeInfo=$writeInfo")
     new DeltaWriteBuilder(table, writeInfo)
+  }
+
+  override def partitioning(): Array[Transform] = {
+    val partColNames = VectorUtils.toJavaList[String](
+      table.getLatestSnapshot(engine).asInstanceOf[SnapshotImpl].getMetadata.getPartitionColumns)
+
+    val result = partColNames.asScala.map(partColName => Expressions.identity(partColName)).toArray
+
+    logger.info(s"partitioning: partColNames=$partColNames, result=$result")
+
+    result
   }
 }
 
