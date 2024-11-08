@@ -28,8 +28,7 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def loadTable(ident: Identifier): Table = {
-    val path = ident.name()
-    new DeltaTable(path) // Uses DeltaTable class
+    new DeltaTable(ident.name())
   }
 
   override def createTable(
@@ -58,7 +57,7 @@ class DeltaCatalog extends TableCatalog {
       .build(engine)
       .commit(engine, io.delta.kernel.utils.CloseableIterable.emptyIterable())
 
-    logger.info(s"createTable: resultVersion=${result.getVersion()}")
+    logger.info(s"createTable: resultVersion=${result.getVersion}")
 
     val table = new DeltaTable(path)
     inMemoryTables.put(ident.name(), table)

@@ -1,4 +1,4 @@
-package io.delta
+package io.delta.write
 
 import io.delta.kernel.data.{ColumnVector, FilteredColumnarBatch}
 import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch
@@ -9,14 +9,14 @@ import io.delta.kernel.internal.data.TransactionStateRow
 import io.delta.kernel.types.{BooleanType, IntegerType, LongType, StringType}
 import io.delta.kernel.utils.{CloseableIterable, CloseableIterator}
 import io.delta.kernel.{Operation, Table => KernelTable, Transaction => KernelTransaction}
+import io.delta.{AbstractVectorWrapper, DataUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write._
 
 import java.util.UUID
-import scala.reflect.ClassTag
-
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////

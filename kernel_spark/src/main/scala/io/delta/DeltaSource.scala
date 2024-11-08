@@ -16,7 +16,6 @@ class DeltaSource extends DataSourceRegister with TableProvider {
     null
   }
 
-
   override def inferPartitioning(options: CaseInsensitiveStringMap): Array[Transform] = {
     logger.info(s"inferPartitioning: options=${options.entrySet()}")
     val table = getTable(null, null, options)

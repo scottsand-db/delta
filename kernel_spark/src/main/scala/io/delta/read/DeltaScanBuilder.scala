@@ -1,0 +1,80 @@
+package io.delta.read
+
+import io.delta.SchemaUtils
+import io.delta.kernel.{Table => KernelTable}
+import io.delta.kernel.engine.{Engine => KernelEngine}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.types.StructType
+
+class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
+    extends ScanBuilder
+    with SupportsPushDownRequiredColumns
+    // with SupportsPushDownV2Filters
+    {
+  import DeltaScanBuilder._
+
+  private val readSnapshot = kernelTable.getLatestSnapshot(tableEngine)
+  private val scanBuilder = readSnapshot.getScanBuilder(tableEngine)
+  private var sparkSchema =
+    SchemaUtils.convertKernelSchemaToSparkSchema(readSnapshot.getSchema(tableEngine))
+
+  logger.info(
+    s"Constructed DeltaScanBuilder for ${kernelTable.getPath(tableEngine)} at read " +
+      s"version ${readSnapshot.getVersion(tableEngine)}")
+
+  /**
+   * Data sources can implement this interface to push down required columns to the data source
+   * and only read these columns during scan to reduce the size of the data to be read.
+   *
+   * Applies column pruning w.r.t. the given requiredSchema.
+   */
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    // TODO: verify that requiredSchema is a subset of the table schema
+    logger.info(s"Pruning columns for required schema: $requiredSchema")
+
+    sparkSchema = requiredSchema
+    scanBuilder.withReadSchema(
+      tableEngine,
+      SchemaUtils.convertSparkSchemaToKernelSchema(sparkSchema))
+  }
+
+  /**
+   * Data sources can implement this interface to push down V2 Predicate to the data source and
+   * reduce the size of the data to be read.
+   *
+   * Pushes down predicates, and returns predicates that need to be evaluated after scanning. Rows
+   * should be returned from the data source if and only if all of the predicates match. That is,
+   * predicates must be interpreted as ANDed together.
+   */
+//  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+//    ???
+//  }
+
+  /**
+   * Returns the predicates that are pushed to the data source via [[pushPredicates]].
+   *
+   * There are 3 kinds of predicates:
+   *   - pushable predicates which don't need to be evaluated again after scanning.
+   *   - pushable predicates which still need to be evaluated after scanning, e.g. parquet row
+   *     group predicate.
+   *   - non-pushable predicates.
+   *
+   * Both case 1 and 2 should be considered as pushed predicates and should be returned by this
+   * method.
+   *
+   * It's possible that there is no predicates in the query and [[pushPredicates]] is never
+   * called, empty array should be returned for this case.
+   */
+//  override def pushedPredicates(): Array[Predicate] = {
+//
+//  }
+
+  override def build(): Scan = {
+    new DeltaScan(scanBuilder.build(), tableEngine, sparkSchema)
+  }
+}
+
+object DeltaScanBuilder {
+  private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+}
