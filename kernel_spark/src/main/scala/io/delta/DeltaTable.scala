@@ -46,14 +46,22 @@ class DeltaTable(path: String) extends Table with SupportsWrite {
   }
 
   override def partitioning(): Array[Transform] = {
-    val partColNames = VectorUtils.toJavaList[String](
-      table.getLatestSnapshot(engine).asInstanceOf[SnapshotImpl].getMetadata.getPartitionColumns)
+    try {
+      val partColNames = VectorUtils.toJavaList[String](
+        table.getLatestSnapshot(engine).asInstanceOf[SnapshotImpl].getMetadata.getPartitionColumns)
 
-    val result = partColNames.asScala.map(partColName => Expressions.identity(partColName)).toArray
+      val result =
+        partColNames.asScala.map(partColName => Expressions.identity(partColName)).toArray
 
-    logger.info(s"partitioning: partColNames=$partColNames, result=$result")
+      logger.info(s"partitioning: partColNames=$partColNames, result=$result")
 
-    result
+      result
+    } catch {
+      case e: TableNotFoundException =>
+        logger.warn("schema: Table not found", e)
+        logger.warn("schema: Returning empty partitioning")
+        Array.empty
+    }
   }
 }
 
