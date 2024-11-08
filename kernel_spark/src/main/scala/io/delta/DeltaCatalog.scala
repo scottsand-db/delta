@@ -3,12 +3,14 @@ package io.delta
 import io.delta.kernel.Operation
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import java.util
 import java.util.UUID
+
+import scala.collection.JavaConverters._
 
 class DeltaCatalog extends TableCatalog {
   import DeltaCatalog._
@@ -38,17 +40,21 @@ class DeltaCatalog extends TableCatalog {
     val path = if (properties.containsKey("path")) {
       properties.get("path")
     } else {
-      s"/tmp/table_${UUID.randomUUID().toString.replace("-", "")}"
+      s"/tmp/table_${UUID.randomUUID().toString.replace("-", "").substring(0, 4)}"
     }
 
     logger.info(
-      s"createTable: ident=$ident, schema=$schema, partitions=$partitions, " +
-        s"properties=$properties, path=$path")
+      s"createTable: ident=$ident, schema=$schema, " +
+        s"partitions=${partitions.mkString("Array(", ", ", ")")}, properties=$properties, " +
+        s"path=$path")
+
+    val partitionCols = partitions.map(extractPartitionColumn)
 
     val result = io.delta.kernel.Table
       .forPath(engine, path)
       .createTransactionBuilder(engine, "kernel-spark-dsv2", Operation.CREATE_TABLE)
       .withSchema(engine, SchemaUtils.convertSparkSchemaToKernelSchema(schema))
+      .withPartitionColumns(engine, partitionCols.toList.asJava)
       .build(engine)
       .commit(engine, io.delta.kernel.utils.CloseableIterable.emptyIterable())
 
@@ -81,11 +87,29 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def name(): String = catalogName
+
+  private def extractPartitionColumn(transform: Transform): String = {
+    logger.info(s"transform: $transform")
+    // Check if the transform is an identity transform
+    if (transform.name() == "identity" && transform.references().nonEmpty) {
+      // Get the first reference, which should be the column
+      transform.references()(0) match {
+        case namedRef: NamedReference =>
+          logger.info(s"namedRef: $namedRef")
+          logger.info(
+            s"namedRef.fieldNames: ${namedRef.fieldNames().mkString("Array(", ", ", ")")}")
+          namedRef.fieldNames().mkString(".")
+        case _ => throw new RuntimeException("bad aa")
+      }
+    } else {
+      throw new RuntimeException("bad bb")
+    }
+  }
 }
 
 object DeltaCatalog {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-// identifier -> table
+  // identifier -> table
   val inMemoryTables = scala.collection.mutable.Map[String, DeltaTable]()
 }

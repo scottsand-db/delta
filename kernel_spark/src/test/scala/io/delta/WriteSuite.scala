@@ -18,11 +18,12 @@ class WriteSuite extends QueryTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set(StaticSQLConf.SPARK_SESSION_EXTENSIONS.key, classOf[DeltaSparkSessionExtension].getName)
+      .set(
+        StaticSQLConf.SPARK_SESSION_EXTENSIONS.key,
+        classOf[DeltaSparkSessionExtension].getName)
       .set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[DeltaCatalog].getName)
       .set("spark.sql.catalog.my_delta_catalog", "io.delta.DeltaCatalog")
   }
-
 
   def withUniquePath(test: String => Unit): Unit = {
     val path = s"/tmp/delta_tables/table_${UUID.randomUUID().toString.substring(0, 8)}"
@@ -148,9 +149,26 @@ class WriteSuite extends QueryTest with SharedSparkSession {
     spark.range(10).write.format("delta2").saveAsTable(s"my_delta_catalog.$tableName")
   }
 
-  test("eee") {
-    withUniquePath { path =>
-      spark.range(10).write.format("delta2").save(path)
-    }
+//  test("eee") {
+//    withUniquePath { path =>
+//      spark.range(10).write.mode("overwrite").format("delta2").save(path)
+//    }
+//  }
+
+  test("fff") {
+    val tableName = s"table_${UUID.randomUUID().toString.substring(0, 4)}"
+    println(s"using table name $tableName")
+
+    spark
+      .range(10)
+      .withColumn("part1", col("id") % 5)
+      .withColumn("col1", col("id").cast("long"))
+      .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
+      .withColumn("col3", col("id") % 2 === 0)
+      .drop("id")
+      .write
+      .format("delta2")
+      .partitionBy("part1")
+      .saveAsTable(s"my_delta_catalog.$tableName")
   }
 }

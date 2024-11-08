@@ -79,12 +79,8 @@ private class DeltaBatchWrite(kernelTable: KernelTable, logicalWriteInfo: Logica
   private val engine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
 
-  private val dataSourceSchema =
-    SchemaUtils.convertSparkSchemaToKernelSchema(logicalWriteInfo.schema())
-
   private val txn = kernelTable
     .createTransactionBuilder(engine, "kernel-spark-dsv2", Operation.WRITE)
-//    .withSchema(engine, dataSourceSchema)
     .build(engine)
 
   val txnStateRowSerialized = JsonUtils.rowToJson(txn.getTransactionState(engine))
