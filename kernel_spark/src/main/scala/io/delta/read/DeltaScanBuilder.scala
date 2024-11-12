@@ -1,8 +1,10 @@
 package io.delta.read
 
-import io.delta.SchemaUtils
+import io.delta.{ExpressionUtils, SchemaUtils}
 import io.delta.kernel.{Table => KernelTable}
 import io.delta.kernel.engine.{Engine => KernelEngine}
+import io.delta.kernel.expressions.{And => KernelAnd}
+import io.delta.kernel.internal.ScanImpl
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.types.StructType
@@ -10,14 +12,14 @@ import org.apache.spark.sql.types.StructType
 class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
     extends ScanBuilder
     with SupportsPushDownRequiredColumns
-    // with SupportsPushDownV2Filters
-    {
+    with SupportsPushDownV2Filters {
   import DeltaScanBuilder._
 
   private val readSnapshot = kernelTable.getLatestSnapshot(tableEngine)
   private val scanBuilder = readSnapshot.getScanBuilder(tableEngine)
   private var sparkSchema =
     SchemaUtils.convertKernelSchemaToSparkSchema(readSnapshot.getSchema(tableEngine))
+  private var pushedSparkPredicates = Array.empty[Predicate]
 
   logger.info(
     s"Constructed DeltaScanBuilder for ${kernelTable.getPath(tableEngine)} at read " +
@@ -47,9 +49,57 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
    * should be returned from the data source if and only if all of the predicates match. That is,
    * predicates must be interpreted as ANDed together.
    */
-//  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-//    ???
-//  }
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    logger.info(s"pushPredicates(): predicates=$predicates")
+
+    val sparkToKernelPredicates =
+      predicates.map(p => p -> ExpressionUtils.convertStoKPredicate(p)).collect {
+        case (sparkPredicate, Some(kernelPredicate)) => sparkPredicate -> kernelPredicate
+      }
+
+    logger.info(s"sparkToKernelPredicatesMap: ${sparkToKernelPredicates.mkString(", ")}")
+
+    val kernelAndOpt = sparkToKernelPredicates
+      .map(_._2)
+      .reduceOption((left, right) => new KernelAnd(left, right))
+
+    logger.info(s"Pushing down predicates: $kernelAndOpt")
+
+    if (kernelAndOpt.nonEmpty) {
+      scanBuilder.withFilter(tableEngine, kernelAndOpt.get)
+      val scan = scanBuilder.build()
+      val kernelRemainingOpt = scan.getRemainingFilter
+
+      logger.info(s"kernelRemainingOpt: $kernelRemainingOpt")
+
+      val kernelPushedOpt = scan.asInstanceOf[ScanImpl].getPartitionsFilters()
+
+      if (kernelPushedOpt.isPresent) {
+        logger.info(s"pushed partition filters: ${kernelPushedOpt.get()}")
+        ExpressionUtils.convertKtoSPredicate(kernelPushedOpt.get()).map { pushed =>
+          pushedSparkPredicates = Array(pushed)
+        }
+      }
+//      else {
+//        // HACK that works for a basic, trivial case
+//        logger.info("Kernel pushed is empty, returning original predicates input")
+//        return predicates
+//      }
+
+      if (kernelRemainingOpt.isPresent) {
+        val sparkRemainingOpt = ExpressionUtils.convertKtoSPredicate(kernelRemainingOpt.get())
+
+        logger.info(s"sparkRemainingOpt: ${sparkRemainingOpt.toArray.mkString(", ")}")
+
+        sparkRemainingOpt.toArray
+      } else {
+        Array.empty
+      }
+    } else {
+      logger.info("No pushable predicates found")
+      predicates
+    }
+  }
 
   /**
    * Returns the predicates that are pushed to the data source via [[pushPredicates]].
@@ -66,9 +116,10 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
    * It's possible that there is no predicates in the query and [[pushPredicates]] is never
    * called, empty array should be returned for this case.
    */
-//  override def pushedPredicates(): Array[Predicate] = {
-//
-//  }
+  override def pushedPredicates(): Array[Predicate] = {
+    logger.info(s"pushedPredicates(): $pushedSparkPredicates")
+    pushedSparkPredicates
+  }
 
   override def build(): Scan = {
     new DeltaScan(scanBuilder.build(), tableEngine, sparkSchema)

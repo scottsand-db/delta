@@ -3,6 +3,7 @@ package io.delta
 import io.delta.sql.DeltaSparkSessionExtension
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.functions.{col, concat, lit}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -33,4 +34,30 @@ class ReadSuite extends QueryTest with SharedSparkSession {
       spark.read.format("delta2").load(path).show()
     }
   }
+
+  test("bbb") {
+    withUniquePath { path =>
+      spark
+        .range(10)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id").cast("long"))
+        .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
+        .withColumn("col3", col("id") % 2 === 0)
+        .drop("id")
+        .write
+        .format("delta")
+        .partitionBy("part1")
+        .save(path)
+
+      // read using DSV2
+      // reading using partition filter WORKS, reading using data filter FAILS
+      spark.read.format("delta2").load(path).where("part1 = 1").show()
+    }
+  }
+
+  // TODO: test reading partitioned table
+
+  // TODO: test reading subset of columns
+
+  // TODO: implement and then test reading with a filter
 }
