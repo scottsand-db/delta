@@ -9,7 +9,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class KernelColumnarBatchToSparkColumnarBatchWrapper(
     columns: Array[SparkColumnVector],
     numRows: Int)
-    extends SparkColumnarBatch(columns, numRows) {}
+    extends SparkColumnarBatch(columns, numRows)
 
 object KernelColumnarBatchToSparkColumnarBatchWrapper {
   private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
@@ -19,6 +19,9 @@ object KernelColumnarBatchToSparkColumnarBatchWrapper {
     val kernelColumnarBatch = kernelFilteredColumnarBatch.getData
     val numColumns = kernelColumnarBatch.getSchema.length()
     val numRows = kernelColumnarBatch.getSize
+
+    // TODO: create a mapping from desiredRow (i.e. getInt rowId) to actual row (which would be
+    //  greater than the desiredRow) due to selection vector
 
     logger.info(s"kernelColumnarBatch: numRows $numRows, numColumns: $numColumns, " +
       s"getSchema ${kernelColumnarBatch.getSchema}")
