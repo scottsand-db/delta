@@ -1,6 +1,6 @@
 package io.delta.read
 
-import io.delta.data.KernelRowToSparkRowWrapper
+import io.delta.data.{KernelColumnarBatchToSparkColumnarBatchWrapper, KernelRowToSparkRowWrapper}
 import io.delta.kernel.{Scan => KernelScan}
 import io.delta.kernel.defaults.internal.json.JsonUtils
 import io.delta.kernel.internal.InternalScanFileUtils
@@ -14,53 +14,70 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /** Serialized and sent from the Driver to the Executors */
 class DeltaReaderFactory extends PartitionReaderFactory {
+  import DeltaReaderFactory._
+
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    logger.info("createReader")
+
     require(partition.isInstanceOf[DeltaInputPartition])
 
     new DeltaPartitionReaderOfRows(partition.asInstanceOf[DeltaInputPartition])
   }
 
-  // TODO
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] =
-    super.createColumnarReader(partition)
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+    logger.info("createColumnarReader")
 
-  // TODO
-  override def supportColumnarReads(partition: InputPartition): Boolean =
-    super.supportColumnarReads(partition)
+    require(partition.isInstanceOf[DeltaInputPartition])
+
+    new DeltaPartitionReaderOfColumnarBatch(partition.asInstanceOf[DeltaInputPartition])
+  }
+
+  override def supportColumnarReads(partition: InputPartition): Boolean = {
+    logger.info("supportColumnarReads")
+    true
+  }
+}
+
+object DeltaReaderFactory {
+  private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** Created on the executor. */
-class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
-    extends PartitionReader[InternalRow] {
-  val engine = io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+abstract class DeltaPartitionReader[T](deltaInputPartition: DeltaInputPartition)
+    extends PartitionReader[T] {
+  protected val engine = io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
 
-  val scanFileRow = JsonUtils.rowFromJson(
+  protected val scanFileRow = JsonUtils.rowFromJson(
     deltaInputPartition.serializedScanFileRow,
     InternalScanFileUtils.SCAN_FILE_SCHEMA)
 
-  val addFileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow)
+  protected val addFileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow)
 
-  val scanStateRow =
+  protected val scanStateRow =
     JsonUtils.rowFromJson(deltaInputPartition.serializedScanState, ScanStateRow.SCHEMA)
 
-  private val physicalRowDataIter = engine.getParquetHandler
+  protected val physicalRowDataIter = engine.getParquetHandler
     .readParquetFiles(
       Utils.singletonCloseableIterator(addFileStatus),
       ScanStateRow.getPhysicalDataReadSchema(engine, scanStateRow),
-      java.util.Optional.empty() /* predicate */ )
+      java.util.Optional.empty() /* predicate */)
 
-  private val logicalRowDataIter =
+  protected val logicalRowDataColumnarBatchIter =
     KernelScan.transformPhysicalData(engine, scanStateRow, scanFileRow, physicalRowDataIter)
+}
+
+/** Created on the executor. */
+class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
+    extends DeltaPartitionReader[InternalRow](deltaInputPartition) {
 
   private var rowIter: CloseableIterator[io.delta.kernel.data.Row] = null
   private var curr: io.delta.kernel.data.Row = null
   private var closed = false
 
   override def close(): Unit = {
-    logicalRowDataIter.close()
+    logicalRowDataColumnarBatchIter.close()
     if (rowIter != null) {
       rowIter.close()
     }
@@ -75,8 +92,8 @@ class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
         true
       }
       // If current batch is exhausted, fetch the next batch and reset the row iterator
-      else if (logicalRowDataIter.hasNext) {
-        rowIter = logicalRowDataIter.next().getRows
+      else if (logicalRowDataColumnarBatchIter.hasNext) {
+        rowIter = logicalRowDataColumnarBatchIter.next().getRows
         next() // Recursively call next to process the new batch
       } else {
         false
@@ -91,5 +108,46 @@ class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
       throw new NoSuchElementException("No current row available; call next() first.")
     }
     new KernelRowToSparkRowWrapper(curr)
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+class DeltaPartitionReaderOfColumnarBatch(deltaInputPartition: DeltaInputPartition)
+  extends DeltaPartitionReader[ColumnarBatch](deltaInputPartition) {
+
+  private var currentBatch: KernelColumnarBatchToSparkColumnarBatchWrapper = null
+  private var closed = false
+
+  override def next(): Boolean = {
+    if (!closed) {
+      if (logicalRowDataColumnarBatchIter.hasNext) {
+        val kernelBatch = logicalRowDataColumnarBatchIter.next()
+        currentBatch = KernelColumnarBatchToSparkColumnarBatchWrapper(kernelBatch)
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+  }
+
+  override def get(): ColumnarBatch = {
+    if (currentBatch == null) {
+      throw new NoSuchElementException("No current batch available; call next() first.")
+    }
+    currentBatch
+  }
+
+  override def close(): Unit = {
+    if (!closed) {
+      logicalRowDataColumnarBatchIter.close()
+      if (currentBatch != null) {
+        currentBatch.close()
+      }
+      closed = true
+    }
   }
 }
