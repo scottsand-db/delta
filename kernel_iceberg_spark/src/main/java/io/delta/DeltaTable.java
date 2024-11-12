@@ -199,8 +199,10 @@ public class DeltaTable implements org.apache.iceberg.Table {
     PartitionSpec spec = spec();
     if (spec.isPartitioned()) {
       return ImmutableMap.of(
-          PartitionSpec.unpartitioned().specId(), PartitionSpec.unpartitioned(),
-          spec.specId(), spec);
+          PartitionSpec.unpartitioned().specId(),
+          PartitionSpec.unpartitioned(),
+          spec.specId(),
+          spec);
     } else {
       return ImmutableMap.of(spec.specId(), spec);
     }
