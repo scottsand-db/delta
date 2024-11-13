@@ -18,11 +18,17 @@
  */
 package io.delta;
 
+import io.delta.kernel.Operation;
+import io.delta.kernel.defaults.engine.DefaultEngine;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.utils.CloseableIterable;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
@@ -30,7 +36,6 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.io.FileIOTracker;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
@@ -47,8 +52,7 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
   private String name = null;
   private Map<String, String> catalogProperties = null;
   private String warehouse = null;
-  private FileIO io = null;
-  private FileIOTracker ioTracker = null;
+  private FileIO fileIO = null;
 
   @Override
   public String name() {
@@ -57,7 +61,7 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
 
   @Override
   public List<TableIdentifier> listTables(Namespace namespace) {
-    return List.of();
+    return Collections.emptyList();
   }
 
   @Override
@@ -68,6 +72,23 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
   @Override
   public void renameTable(TableIdentifier from, TableIdentifier to) {
     throw new UnsupportedOperationException("Rename is not supported");
+  }
+
+  @Override
+  public Table createTable(TableIdentifier identifier, Schema schema) {
+    String tableLocation = tableLocation(identifier);
+    Engine engine = DefaultEngine.create(conf);
+    io.delta.kernel.Table kernelTable = io.delta.kernel.Table.forPath(engine, tableLocation);
+    kernelTable
+        .createTransactionBuilder(engine, "iceberg", Operation.CREATE_TABLE)
+        .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()))
+        .build(engine)
+        .commit(engine, CloseableIterable.emptyIterable());
+    return new DeltaTable(identifier, conf, tableLocation);
+  }
+
+  private String tableLocation(TableIdentifier ident) {
+    return SLASH.join(warehouse, ident.name());
   }
 
   @Override
@@ -104,10 +125,8 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
         warehouse != null, "Missing required property: %s", CatalogProperties.WAREHOUSE_LOCATION);
 
     String ioImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
-    this.io =
+    this.fileIO =
         ioImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(ioImpl, properties, conf);
-
-    this.ioTracker = new FileIOTracker();
   }
 
   @Override
