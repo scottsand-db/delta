@@ -561,6 +561,63 @@ lazy val sharing = (project in file("sharing"))
     )
   ).configureUnidoc()
 
+lazy val kernelIcebergSpark = (project in file("kernel_iceberg_spark"))
+  .dependsOn(kernelApi)
+  .dependsOn(kernelDefaults)
+  .settings(
+    name := "delta-iceberg-spark",
+    commonSettings,
+    javaOnlyReleaseSettings,
+    javafmtCheckSettings,
+    scalacOptions ++= Seq(
+      "-encoding",
+      "UTF-8",
+      "-target:jvm-1.8",
+      "-Xlint",
+      "-deprecation",
+      "-feature",
+      "-Xfatal-warnings",
+      "-Ywarn-dead-code",
+      "-Ywarn-numeric-widen",
+      "-Ywarn-value-discard",
+      "-Ywarn-unused:imports",
+      "-Ywarn-unused:params",
+      "-Ywarn-adapted-args",
+      "-Ywarn-nullary-override",
+      "-Yno-adapted-args",
+      "-Yno-predef",
+      "-Xfuture"
+    ),
+    javaOptions ++= Seq(
+      "-XX:+IgnoreUnrecognizedVMOptions",
+      "-XX:+UseG1GC",
+      "-XX:MaxGCPauseMillis=50",
+      "-XX:G1HeapRegionSize=32M",
+      "-XX:InitiatingHeapOccupancyPercent=30",
+      "-XX:+ExplicitGCInvokesConcurrent",
+      "-Dspark.driver.port=50001",
+      "-Dspark.repl.class.basedir=.",
+      "-Dspark.ui.port=4040",
+      "-Dlog4j.configuration=file:project/log4j.properties",
+      "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    ),
+    libraryDependencies ++= Seq(
+      "org.apache.iceberg" % "iceberg-core" % "1.6.1",
+      "org.apache.iceberg" % "iceberg-common" % "1.6.1",
+      "org.apache.iceberg" % "iceberg-parquet" % "1.6.1",
+      "org.apache.iceberg" % "iceberg-aws" % "1.6.1",
+
+      // Test deps
+      "org.apache.iceberg" %% "iceberg-spark-runtime-3.5" % "1.6.1" % "test",
+      "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
+      "org.apache.spark" %% "spark-catalyst" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-core" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "test" classifier "tests",
+      "org.apache.spark" %% "spark-hive" % "3.5.1" % "test" classifier "tests"
+    )
+  )
+
 lazy val kernelApi = (project in file("kernel/kernel-api"))
   .settings(
     name := "delta-kernel-api",
