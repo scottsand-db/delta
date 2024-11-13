@@ -92,16 +92,19 @@ public class DeltaTableBuilder implements TableBuilder {
 
   @Override
   public Transaction createTransaction() {
+    LOG.info("Scott > DeltaTableBuilder > createTransaction");
     return null;
   }
 
   @Override
   public Transaction replaceTransaction() {
+    LOG.info("Scott > DeltaTableBuilder > replaceTransaction");
     return null;
   }
 
   @Override
   public Transaction createOrReplaceTransaction() {
+    LOG.info("Scott > DeltaTableBuilder > createOrReplaceTransaction");
     return null;
   }
 }

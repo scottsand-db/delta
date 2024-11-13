@@ -140,36 +140,36 @@ public class DeltaTable implements org.apache.iceberg.Table {
         currentVersionId);
   }
 
-  private boolean ensureWritable() {
-    if (currentVersion.canWrite()) {
-      return true;
-    }
-
-    // check if the table's name mapping should be updated to enable writes
-    String uniform = currentVersion.metadata().getConfiguration().get(UNIFORM_FORMAT_KEY);
-    if (uniform != null && uniform.toLowerCase(Locale.ROOT).contains("iceberg")) {
-      if (currentVersion.columnMappingEnabled() && currentVersion.hasMissingFieldIds()) {
-        // update the name mapping to assign the missing field IDs
-        Pair<NameMapping, Integer> updated =
-            DeltaTypeUtil.updateNameMapping(
-                currentVersion.metadata().getSchema(),
-                currentVersion.nameMapping(),
-                currentVersion.lastAssignedFieldId());
-
-        String updatedMappingStr = NameMappingParser.toJson(updated.first());
-        String newLastAssignedId = String.valueOf(updated.second());
-
-        updateProperties()
-            .set(NAME_MAPPING_KEY, updatedMappingStr)
-            .set(LAST_ASSIGNED_ID_KEY, newLastAssignedId)
-            .commit();
-
-        refresh();
-      }
-    }
-
-    return currentVersion.canWrite();
-  }
+//  private boolean ensureWritable() {
+//    if (currentVersion.canWrite()) {
+//      return true;
+//    }
+//
+//    // check if the table's name mapping should be updated to enable writes
+//    String uniform = currentVersion.metadata().getConfiguration().get(UNIFORM_FORMAT_KEY);
+//    if (uniform != null && uniform.toLowerCase(Locale.ROOT).contains("iceberg")) {
+//      if (currentVersion.columnMappingEnabled() && currentVersion.hasMissingFieldIds()) {
+//        // update the name mapping to assign the missing field IDs
+//        Pair<NameMapping, Integer> updated =
+//            DeltaTypeUtil.updateNameMapping(
+//                currentVersion.metadata().getSchema(),
+//                currentVersion.nameMapping(),
+//                currentVersion.lastAssignedFieldId());
+//
+//        String updatedMappingStr = NameMappingParser.toJson(updated.first());
+//        String newLastAssignedId = String.valueOf(updated.second());
+//
+//        updateProperties()
+//            .set(NAME_MAPPING_KEY, updatedMappingStr)
+//            .set(LAST_ASSIGNED_ID_KEY, newLastAssignedId)
+//            .commit();
+//
+//        refresh();
+//      }
+//    }
+//
+//    return currentVersion.canWrite();
+//  }
 
   @Override
   public BatchScan newBatchScan() {
@@ -193,16 +193,18 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public Map<Integer, Schema> schemas() {
-    // load all available snapshots
-    loadAllSnapshots();
-
-    ImmutableMap.Builder<Integer, Schema> schemas = ImmutableMap.builder();
-    for (DeltaSnapshot snapshot : snapshots.asMap().values()) {
-      Schema snapshotSchema = snapshot.schema();
-      schemas.put(snapshotSchema.schemaId(), snapshotSchema);
-    }
-
-    return schemas.build();
+    throw new RuntimeException("DeltaTable::schemas called");
+//
+//    // load all available snapshots
+//    loadAllSnapshots();
+//
+//    ImmutableMap.Builder<Integer, Schema> schemas = ImmutableMap.builder();
+//    for (DeltaSnapshot snapshot : snapshots.asMap().values()) {
+//      Schema snapshotSchema = snapshot.schema();
+//      schemas.put(snapshotSchema.schemaId(), snapshotSchema);
+//    }
+//
+//    return schemas.build();
   }
 
   @Override
@@ -313,8 +315,8 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public AppendFiles newAppend() {
-    Preconditions.checkState(
-        ensureWritable(), "Cannot write to Delta table %s: must have stable field IDs", name());
+//    Preconditions.checkState(
+//        ensureWritable(), "Cannot write to Delta table %s: must have stable field IDs", name());
     return new DeltaAppend(this, deltaTable, deltaEngine);
   }
 

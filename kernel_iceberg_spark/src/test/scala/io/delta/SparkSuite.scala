@@ -1,6 +1,7 @@
 package io.delta
 
 
+import org.apache.iceberg.catalog.TableIdentifier
 import org.apache.spark.SparkConf
 
 import java.util.UUID
@@ -12,15 +13,15 @@ object SparkSuite {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }
 
+// scalastyle:off deltahadoopconfiguration
 // scalastyle:off line.size.limit
 // build/sbt -Djava.version=17 -Dio.netty.tryReflectionSetAccessible=true 'kernelIcebergSpark/testOnly *SparkSuite -- -z "ccc"'
-// scalastyle:on line.size.limit
 class SparkSuite extends QueryTest with SharedSparkSession {
   import SparkSuite._
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkCatalog") // Set Spark’s default to Iceberg
+      .set("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") // Set Spark’s default to Iceberg
       .set("spark.sql.catalog.spark_catalog.type", "hadoop") // Example: specify catalog type for Iceberg
       .set("spark.sql.catalog.my_catalog", "org.apache.iceberg.spark.SparkCatalog") // Use Iceberg’s SparkCatalog for my_catalog
       .set("spark.sql.catalog.my_catalog.catalog-impl", "io.delta.DeltaCatalog") // Implement with DeltaCatalog
@@ -43,8 +44,35 @@ class SparkSuite extends QueryTest with SharedSparkSession {
   }
 
   test("aaa") {
-    val tableName = s"table_${UUID.randomUUID().toString.substring(0, 4)}"
-    spark.range(10).write.format("iceberg").mode("overwrite").saveAsTable(s"my_catalog.$tableName")
+    withTableNameAndLocation { (tableName, tableLocation) =>
+      val tableIdentifier = s"my_catalog.$tableName"
+      spark.sql(
+        s"CREATE TABLE $tableIdentifier (id BIGINT) USING iceberg LOCATION '$tableLocation'");
+
+      logger.info(s"Scott >> Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
+
+      val deltaTableAsIcebergTable = new io.delta.DeltaTable(
+        TableIdentifier.of(tableIdentifier), spark.sessionState.newHadoopConf(), tableLocation);
+
+      deltaTableAsIcebergTable.schema().columns().forEach { col =>
+        logger.info(s"Scott > Name: ${col.name()}, Type: ${col.`type`()}, fieldId: ${col.fieldId()}")
+      }
+
+      spark.range(10)
+        .write
+        .format("iceberg")
+        .option("path", tableLocation)
+        .mode("append")
+        .saveAsTable(tableIdentifier)
+
+      logger.info("SHOWING ICEBERG TABLE READ")
+
+      spark.read.format("iceberg").table(tableIdentifier).show()
+
+      logger.info("SHOWING DELTA TABLE READ")
+
+      spark.read.format("delta").load(tableLocation).show()
+    }
   }
 
   // SIMPLE CASE: write via delta-spark dsv1 and read via iceberg + DeltaCatalog dsv2
