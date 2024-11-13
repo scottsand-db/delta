@@ -43,6 +43,7 @@ class SparkSuite extends QueryTest with SharedSparkSession {
     test(tableName, tableLocation)
   }
 
+  // SIMPLE WRITE THEN READ
   test("aaa") {
     withTableNameAndLocation { (tableName, tableLocation) =>
       val tableIdentifier = s"my_catalog.$tableName"
@@ -68,6 +69,43 @@ class SparkSuite extends QueryTest with SharedSparkSession {
       logger.info("SHOWING ICEBERG TABLE READ")
 
       spark.read.format("iceberg").table(tableIdentifier).show()
+
+      logger.info("SHOWING DELTA TABLE READ")
+
+      spark.read.format("delta").load(tableLocation).show()
+    }
+  }
+
+  // PARTITIONED WRITE THEN READ
+  test("aaa2") {
+    withTableNameAndLocation { (tableName, tableLocation) =>
+      val tableIdentifier = s"my_catalog.$tableName"
+      spark.sql(s"CREATE TABLE $tableIdentifier (part1 BIGINT, col1 BIGINT, col2 BIGINT, col3 BIGINT) " +
+        s"USING iceberg " +
+        s"LOCATION '$tableLocation' " +
+        s"PARTITIONED BY (part1)")
+
+      logger.info(s"Scott >> Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
+
+      val deltaTableAsIcebergTable = new io.delta.DeltaTable(
+        TableIdentifier.of(tableIdentifier), spark.sessionState.newHadoopConf(), tableLocation);
+
+      deltaTableAsIcebergTable.schema().columns().forEach { col =>
+        logger.info(s"Scott > Name: ${col.name()}, Type: ${col.`type`()}, fieldId: ${col.fieldId()}")
+      }
+
+      spark
+        .range(10)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id"))
+        .withColumn("col2", col("id") * 10)
+        .withColumn("col3", col("id") * 100)
+        .drop("id")
+        .write
+        .format("iceberg")
+        .option("path", tableLocation)
+        .mode("append")
+        .saveAsTable(tableIdentifier)
 
       logger.info("SHOWING DELTA TABLE READ")
 
