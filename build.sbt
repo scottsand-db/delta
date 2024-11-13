@@ -569,7 +569,7 @@ lazy val kernelIcebergSpark = (project in file("kernel_iceberg_spark"))
     name := "delta-iceberg-spark",
     commonSettings,
     javaOnlyReleaseSettings,
-    javafmtCheckSettings,
+//    javafmtCheckSettings,
     scalacOptions ++= Seq(
       "-encoding",
       "UTF-8",
@@ -609,6 +609,8 @@ lazy val kernelIcebergSpark = (project in file("kernel_iceberg_spark"))
     libraryDependencies ++= Seq(
       "org.apache.iceberg" % "iceberg-core" % "1.6.1" exclude("org.apache.parquet", "parquet-common"),
       "org.apache.iceberg" % "iceberg-common" % "1.6.1",
+      "org.apache.spark" %% "spark-core" % "3.5.1" % "provided",
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "provided",
       /*
   java.lang.ClassCastException: class org.apache.parquet.schema.MessageType cannot be cast to class
   org.apache.iceberg.shaded.org.apache.parquet.schema.MessageType (org.apache.parquet.schema.MessageType

@@ -72,8 +72,12 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DeltaTable implements org.apache.iceberg.Table {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DeltaTable.class);
   static final String LAST_ASSIGNED_ID_KEY = "delta.columnMapping.maxColumnId";
   static final String NAME_MAPPING_KEY = "delta.universalFormat.iceberg.nameMapping";
   private static final String COLUMN_MAPPING_MODE_KEY = "delta.columnMapping.mode";
@@ -83,7 +87,7 @@ public class DeltaTable implements org.apache.iceberg.Table {
   private final String deltaTableLocation;
   private final Table deltaTable;
   private final Engine deltaEngine;
-  private final HadoopFileIO io;
+  private final HadoopFileIO fileIO;
   private final LoadingCache<Long, DeltaSnapshot> snapshots;
 
   private DeltaSnapshot currentVersion = null;
@@ -96,7 +100,7 @@ public class DeltaTable implements org.apache.iceberg.Table {
     this.deltaTableLocation = deltaTableLocation;
     this.deltaEngine = DefaultEngine.create(conf);
     this.deltaTable = Table.forPath(deltaEngine, deltaTableLocation);
-    this.io = new HadoopFileIO(conf);
+    this.fileIO = new HadoopFileIO(conf);
     this.snapshots =
         Caffeine.newBuilder()
             .build(
@@ -124,8 +128,16 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public void refresh() {
-    this.currentVersionId = deltaTable.getLatestSnapshot(deltaEngine).getVersion(deltaEngine);
+    io.delta.kernel.Snapshot snapshot = deltaTable.getLatestSnapshot(deltaEngine);
+    io.delta.kernel.types.StructType schema = snapshot.getSchema(deltaEngine);
+    this.currentVersionId = snapshot.getVersion(deltaEngine);
     this.currentVersion = snapshots.get(currentVersionId);
+
+    LOG.info(
+        "Scott > refresh :: deltaTableLocation {}, schema {}, currentVersionId {}",
+        deltaTableLocation,
+        schema,
+        currentVersionId);
   }
 
   private boolean ensureWritable() {
@@ -161,6 +173,10 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public BatchScan newBatchScan() {
+    LOG.info("Scott > newBatchScan");
+
+    refresh();
+
     return new DeltaTableScan(this, deltaTable, deltaEngine);
   }
 
@@ -191,7 +207,9 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public PartitionSpec spec() {
-    return snapshots.get(currentVersionId).spec();
+    final PartitionSpec result = snapshots.get(currentVersionId).spec();
+    LOG.info("Scott > DeltaTable spec :: spec {}, currentVersionId: {}", result, currentVersionId);
+    return result;
   }
 
   @Override
@@ -348,7 +366,7 @@ public class DeltaTable implements org.apache.iceberg.Table {
   @Override
   public FileIO io() {
     // TODO: may need a FileIO that calls through the engine's FileSystemClient
-    return io;
+    return fileIO;
   }
 
   @Override

@@ -84,6 +84,24 @@ public class ScanImpl implements Scan {
         };
   }
 
+  @Override
+  public String toString() {
+    return "ScanImpl{"
+        + "snapshotSchema="
+        + snapshotSchema
+        + ", readSchema="
+        + readSchema
+        + ", protocol="
+        + protocol
+        + ", metadata="
+        + metadata
+        + ", dataPath="
+        + dataPath
+        + ", partitionAndDataFilters="
+        + partitionAndDataFilters
+        + '}';
+  }
+
   /**
    * Get an iterator of data files in this version of scan that survived the predicate pruning.
    *

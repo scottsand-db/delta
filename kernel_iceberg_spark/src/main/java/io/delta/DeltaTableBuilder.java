@@ -4,8 +4,11 @@ import io.delta.kernel.Operation;
 import io.delta.kernel.defaults.engine.DefaultEngine;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.utils.CloseableIterable;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
@@ -21,20 +24,22 @@ public class DeltaTableBuilder implements TableBuilder {
 
   private final TableIdentifier identifier;
   private final Schema schema;
-  private String location;
   private final Configuration conf;
 
-  public DeltaTableBuilder(
-      TableIdentifier identifier, Schema schema, String location, Configuration conf) {
+  private PartitionSpec partitionSpec = null;
+  private String location = null;
+
+  public DeltaTableBuilder(TableIdentifier identifier, Schema schema, Configuration conf) {
     this.identifier = identifier;
     this.schema = schema;
-    this.location = location;
     this.conf = conf;
   }
 
   @Override
   public TableBuilder withPartitionSpec(PartitionSpec spec) {
-    return null;
+    LOG.info("Scott > DeltaTableBuilder > withPartitionSpec :: {}", spec);
+    this.partitionSpec = spec;
+    return this;
   }
 
   @Override
@@ -44,29 +49,42 @@ public class DeltaTableBuilder implements TableBuilder {
 
   @Override
   public TableBuilder withLocation(String location) {
+    LOG.info("Scott > DeltaTableBuilder > withLocation :: {}", location);
     this.location = location;
     return this;
   }
 
   @Override
   public TableBuilder withProperties(Map<String, String> properties) {
-    return null;
+    LOG.info("Scott > DeltaTableBuilder > withProperties :: {}", properties);
+    return this;
   }
 
   @Override
   public TableBuilder withProperty(String key, String value) {
-    return null;
+    LOG.info("Scott > DeltaTableBuilder > withProperty :: {}->{}", key, value);
+    return this;
   }
 
   @Override
   public Table create() {
+    LOG.info("Scott > DeltaTableBuilder > create");
     Engine engine = DefaultEngine.create(conf);
     io.delta.kernel.Table kernelTable = io.delta.kernel.Table.forPath(engine, location);
-    kernelTable
-        .createTransactionBuilder(engine, "iceberg", Operation.CREATE_TABLE)
-        .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()))
-        .build(engine)
-        .commit(engine, CloseableIterable.emptyIterable());
+    io.delta.kernel.TransactionBuilder txnBuilder =
+        kernelTable
+            .createTransactionBuilder(engine, "iceberg", Operation.CREATE_TABLE)
+            .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()));
+
+    if (partitionSpec != null) {
+      final List<String> partSpecNames =
+          partitionSpec.fields().stream().map(PartitionField::name).collect(Collectors.toList());
+      txnBuilder = txnBuilder.withPartitionColumns(engine, partSpecNames);
+
+      LOG.info("Scott > DeltaTableBuilder > create :: partSpecNames {}", partSpecNames);
+    }
+
+    txnBuilder.build(engine).commit(engine, CloseableIterable.emptyIterable());
 
     LOG.info("DeltaTableBuilder::create :::: Created table: {} with schema {}", identifier, schema);
     return new DeltaTable(identifier, conf, location);

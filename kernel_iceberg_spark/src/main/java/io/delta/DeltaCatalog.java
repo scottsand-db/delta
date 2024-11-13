@@ -25,9 +25,13 @@ import io.delta.kernel.utils.CloseableIterable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
@@ -45,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DeltaCatalog implements Catalog, Configurable<Configuration> {
+
   private static final Logger LOG = LoggerFactory.getLogger(DeltaCatalog.class);
   private static final String HIVE_WAREHOUSE_PROP = "hive.metastore.warehouse.dir";
   private static final Joiner SLASH = Joiner.on("/");
@@ -76,17 +81,71 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
   }
 
   @Override
-  public Table createTable(TableIdentifier identifier, Schema schema) {
-    LOG.info("createTable ::: Creating table: {} with schema {}", identifier, schema);
+  public Table createTable(
+      TableIdentifier identifier,
+      Schema schema,
+      PartitionSpec spec,
+      String location,
+      Map<String, String> properties) {
+    LOG.info(
+        "createTable ::: identifier {} with schema {} and spec {} and location {} and properties {}",
+        identifier,
+        schema,
+        spec,
+        location,
+        properties);
+    return createTableHelper(identifier, schema, Optional.of(spec));
+  }
 
+  @Override
+  public Table createTable(
+      TableIdentifier identifier,
+      Schema schema,
+      PartitionSpec spec,
+      Map<String, String> properties) {
+    LOG.info(
+        "createTable ::: identifier {} with schema {} and spec {} and properties {}",
+        identifier,
+        schema,
+        spec,
+        properties);
+    return createTableHelper(identifier, schema, Optional.of(spec));
+  }
+
+  @Override
+  public Table createTable(TableIdentifier identifier, Schema schema, PartitionSpec spec) {
+    LOG.info("createTable ::: identifier {} with schema {} and spec {}", identifier, schema, spec);
+    return createTableHelper(identifier, schema, Optional.of(spec));
+  }
+
+  @Override
+  public Table createTable(TableIdentifier identifier, Schema schema) {
+    LOG.info("createTable ::: identifier {} with schema {}", identifier, schema);
+
+    return createTableHelper(identifier, schema, Optional.empty());
+  }
+
+  private Table createTableHelper(
+      TableIdentifier identifier, Schema schema, Optional<PartitionSpec> partitionSpecOpt) {
     String tableLocation = tableLocation(identifier);
     Engine engine = DefaultEngine.create(conf);
     io.delta.kernel.Table kernelTable = io.delta.kernel.Table.forPath(engine, tableLocation);
-    kernelTable
-        .createTransactionBuilder(engine, "iceberg", Operation.CREATE_TABLE)
-        .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()))
-        .build(engine)
-        .commit(engine, CloseableIterable.emptyIterable());
+    io.delta.kernel.TransactionBuilder txnBuilder =
+        kernelTable
+            .createTransactionBuilder(engine, "iceberg", Operation.CREATE_TABLE)
+            .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()));
+
+    if (partitionSpecOpt.isPresent()) {
+      final List<String> partSpecNames =
+          partitionSpecOpt.get().fields().stream()
+              .map(PartitionField::name)
+              .collect(Collectors.toList());
+      txnBuilder = txnBuilder.withPartitionColumns(engine, partSpecNames);
+
+      LOG.info("Scott > createTableHelper :: partSpecNames {}", partSpecNames);
+    }
+
+    txnBuilder.build(engine).commit(engine, CloseableIterable.emptyIterable());
 
     LOG.info("createTable ::: Created table at path {}", tableLocation);
 
@@ -95,7 +154,8 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
 
   @Override
   public TableBuilder buildTable(TableIdentifier identifier, Schema schema) {
-    return new DeltaTableBuilder(identifier, schema, tableLocation(identifier), conf);
+    LOG.info("Scott > DeltaCatalog :: buildTable() :: identifier {}", identifier);
+    return new DeltaTableBuilder(identifier, schema, conf);
   }
 
   private String tableLocation(TableIdentifier ident) {
@@ -110,6 +170,7 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
     try {
       return new DeltaTable(ident, conf, tableLocation);
     } catch (io.delta.kernel.exceptions.TableNotFoundException ex) {
+      LOG.info("loadTable :: TABLE NOT FOUND");
       throw new NoSuchTableException("Table not found: " + ident, ex);
     }
   }

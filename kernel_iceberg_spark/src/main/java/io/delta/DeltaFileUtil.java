@@ -66,8 +66,13 @@ import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.JsonUtil;
 import org.apache.iceberg.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DeltaFileUtil {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DeltaFileUtil.class);
+
   private DeltaFileUtil() {}
 
   private static final Joiner SLASH = Joiner.on("/");
@@ -208,6 +213,7 @@ public class DeltaFileUtil {
 
   public static class LambdaGroup<E, C extends Iterator<E> & Closeable> extends CloseableGroup
       implements CloseableIterable<E> {
+
     private final Supplier<C> supplier;
 
     public LambdaGroup(Supplier<C> supplier) {
@@ -242,14 +248,25 @@ public class DeltaFileUtil {
           long fileSize = add.getLong(FILE_SIZE);
           String stats = add.getSchema().fields().size() > STATS ? add.getString(STATS) : null;
 
-          return Pair.of(
+          LOG.info("Scott > DeltaFileUtil files :: path {}", path);
+          LOG.info("Scott > DeltaFileUtil files :: spec {}", spec);
+          LOG.info("Scott > DeltaFileUtil files :: partition {}", partition);
+          LOG.info(
+              "Scott > DeltaFileUtil files :: partitionStr {}", toPartitionString(spec, partition));
+          LOG.info("Scott > DeltaFileUtil files :: fileSize {}", fileSize);
+
+          DataFile dataFile =
               DataFiles.builder(spec)
                   .withPath(SLASH.join(baseLocation, path))
                   .withFileSizeInBytes(fileSize)
                   .withPartitionPath(toPartitionString(spec, partition))
                   .withMetrics(metrics(schema, stats))
-                  .build(),
-              null /* TODO: when a DV is supported, pass it here */);
+                  .build();
+
+          LOG.info("Scott > Created DataFile {}", dataFile);
+          LOG.info("Scott > The DataFile has partition values {}", dataFile.partition());
+
+          return Pair.of(dataFile, null /* TODO: when a DV is supported, pass it here */);
         });
   }
 

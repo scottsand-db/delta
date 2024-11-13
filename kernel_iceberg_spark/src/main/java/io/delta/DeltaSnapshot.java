@@ -37,8 +37,12 @@ import org.apache.iceberg.mapping.NameMappingParser;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class DeltaSnapshot implements Snapshot, HistoryEntry {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DeltaSnapshot.class);
   private final SnapshotImpl wrapped;
   private final Metadata metadata;
   private final LogSegment log;
@@ -51,6 +55,9 @@ class DeltaSnapshot implements Snapshot, HistoryEntry {
   private List<DataFile> removedFiles = null;
 
   DeltaSnapshot(io.delta.kernel.Snapshot snapshot) {
+    LOG.info(
+        "Scott > DeltaSnapshot constructed AAA :: snapshot version {}", snapshot.getVersion(null));
+
     Preconditions.checkState(
         snapshot instanceof SnapshotImpl,
         "Unsupported snapshot implementation: %s",
@@ -61,6 +68,9 @@ class DeltaSnapshot implements Snapshot, HistoryEntry {
   }
 
   DeltaSnapshot(SnapshotImpl wrapped) {
+    LOG.info(
+        "Scott > DeltaSnapshot constructed BBB :: snapshot version {}", wrapped.getVersion(null));
+
     this.wrapped = wrapped;
     this.metadata = wrapped.getMetadata();
     this.log = wrapped.getLogSegment();
@@ -106,6 +116,8 @@ class DeltaSnapshot implements Snapshot, HistoryEntry {
           DeltaPartitionUtil.convert(
               schema(), DeltaFileUtil.asStringList(metadata.getPartitionColumns()));
     }
+
+    LOG.info("Scott > DeltaSnapshot spec() :: spec {}", spec.toString());
 
     return spec;
   }

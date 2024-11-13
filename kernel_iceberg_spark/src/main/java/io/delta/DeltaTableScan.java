@@ -35,8 +35,14 @@ import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.Pair;
+//import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
+//import org.apache.spark.sql.connector.read.partitioning.Partitioning;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class DeltaTableScan extends SimpleScan<DeltaTableScan> {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DeltaTableScan.class);
   private final Table deltaTable;
   private final Engine deltaEngine;
 
@@ -68,16 +74,27 @@ class DeltaTableScan extends SimpleScan<DeltaTableScan> {
     PartitionSpec spec = table().spec();
     Snapshot deltaSnapshot = ((DeltaSnapshot) snapshot()).deltaSnapshot();
 
+    LOG.info("Scott > DeltaTableScan planFiles :: schema {}", schema);
+    LOG.info("Scott > DeltaTableScan planFiles :: spec {}", spec);
+    LOG.info("Scott > DeltaTableScan planFiles :: deltaSnapshot {}", deltaSnapshot);
+
     Predicate deltaFilter =
         DeltaExpressionUtil.convert(Binder.bind(schema.asStruct(), filter(), isCaseSensitive()));
+
+    LOG.info("Scott > DeltaTableScan planFiles :: deltaFilter {}", deltaFilter);
 
     ScanImpl scan =
         (ScanImpl)
             deltaSnapshot.getScanBuilder(deltaEngine).withFilter(deltaEngine, deltaFilter).build();
 
+    LOG.info("Scott > DeltaTableScan planFiles :: scan {}", scan);
+
     String schemaString = SchemaParser.toJson(schema);
     String specString = PartitionSpecParser.toJson(spec);
     ResidualEvaluator residualEval = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
+
+    LOG.info("Scott > DeltaTableScan planFiles :: schemaString {}", schemaString);
+    LOG.info("Scott > DeltaTableScan planFiles :: specString {}", specString);
 
     CloseableIterable<FilteredColumnarBatch> batches =
         DeltaFileUtil.fromLambda(() -> scan.getScanFiles(deltaEngine, true));

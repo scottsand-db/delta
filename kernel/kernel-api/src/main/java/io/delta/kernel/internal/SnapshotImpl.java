@@ -61,6 +61,26 @@ public class SnapshotImpl implements Snapshot {
   }
 
   @Override
+  public String toString() {
+    return "SnapshotImpl{"
+        + "logPath="
+        + logPath
+        + ", dataPath="
+        + dataPath
+        + ", version="
+        + version
+        + ", protocol="
+        + protocol
+        + ", metadata="
+        + metadata
+        + ", logSegment="
+        + logSegment
+        + ", inCommitTimestampOpt="
+        + inCommitTimestampOpt
+        + '}';
+  }
+
+  @Override
   public long getVersion(Engine engine) {
     return version;
   }
