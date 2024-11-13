@@ -33,6 +33,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
@@ -76,6 +77,8 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
 
   @Override
   public Table createTable(TableIdentifier identifier, Schema schema) {
+    LOG.info("createTable ::: Creating table: {} with schema {}", identifier, schema);
+
     String tableLocation = tableLocation(identifier);
     Engine engine = DefaultEngine.create(conf);
     io.delta.kernel.Table kernelTable = io.delta.kernel.Table.forPath(engine, tableLocation);
@@ -84,7 +87,15 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
         .withSchema(engine, SchemaUtils.fromIcebergSchema(schema.asStruct()))
         .build(engine)
         .commit(engine, CloseableIterable.emptyIterable());
+
+    LOG.info("createTable ::: Created table at path {}", tableLocation);
+
     return new DeltaTable(identifier, conf, tableLocation);
+  }
+
+  @Override
+  public TableBuilder buildTable(TableIdentifier identifier, Schema schema) {
+    return new DeltaTableBuilder(identifier, schema, tableLocation(identifier), conf);
   }
 
   private String tableLocation(TableIdentifier ident) {
@@ -93,18 +104,20 @@ public class DeltaCatalog implements Catalog, Configurable<Configuration> {
 
   @Override
   public Table loadTable(TableIdentifier ident) {
-    String tableLocation;
-    if (ident.namespace().isEmpty()) {
-      tableLocation = SLASH.join(warehouse, ident.name());
-    } else {
-      tableLocation =
-          SLASH.join(warehouse, SLASH.join(SLASH.join(ident.namespace().levels()), ident.name()));
+    String tableLocation = tableLocation(ident);
+
+    LOG.info("loadTable ::: ident {}, location {}", ident, tableLocation);
+    try {
+      return new DeltaTable(ident, conf, tableLocation);
+    } catch (io.delta.kernel.exceptions.TableNotFoundException ex) {
+      throw new NoSuchTableException("Table not found: " + ident, ex);
     }
-    return new DeltaTable(ident, conf, tableLocation);
   }
 
   @Override
   public void initialize(String name, Map<String, String> properties) {
+    LOG.info("Initializing DeltaCatalog with name: {}", name);
+
     if (null == conf) {
       LOG.warn("No Hadoop Configuration was set, using the default environment Configuration");
       conf = new Configuration();

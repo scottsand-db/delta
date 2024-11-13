@@ -564,6 +564,7 @@ lazy val sharing = (project in file("sharing"))
 lazy val kernelIcebergSpark = (project in file("kernel_iceberg_spark"))
   .dependsOn(kernelApi)
   .dependsOn(kernelDefaults)
+  .dependsOn(spark % "test->test")
   .settings(
     name := "delta-iceberg-spark",
     commonSettings,
@@ -600,21 +601,28 @@ lazy val kernelIcebergSpark = (project in file("kernel_iceberg_spark"))
       "-Dspark.ui.port=4040",
       "-Dlog4j.configuration=file:project/log4j.properties",
       "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
-      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      // java.lang.RuntimeException: Failed to initialize MemoryUtil. You must start Java with
+      // `--add-opens=java.base/java.nio=ALL-UNNAMED` (See https://arrow.apache.org/docs/java/install.html)
+      "--add-opens=java.base/java.nio=ALL-UNNAMED"
     ),
     libraryDependencies ++= Seq(
-      "org.apache.iceberg" % "iceberg-core" % "1.6.1",
+      "org.apache.iceberg" % "iceberg-core" % "1.6.1" exclude("org.apache.parquet", "parquet-common"),
       "org.apache.iceberg" % "iceberg-common" % "1.6.1",
-      "org.apache.iceberg" % "iceberg-parquet" % "1.6.1",
+      /*
+  java.lang.ClassCastException: class org.apache.parquet.schema.MessageType cannot be cast to class
+  org.apache.iceberg.shaded.org.apache.parquet.schema.MessageType (org.apache.parquet.schema.MessageType
+  and org.apache.iceberg.shaded.org.apache.parquet.schema.MessageType are in unnamed module of loader 'app')
+       */
+//      "org.apache.iceberg" % "iceberg-parquet" % "1.6.1" exclude("org.apache.parquet", "parquet-common"),
       "org.apache.iceberg" % "iceberg-aws" % "1.6.1",
-
-      // Test deps
+      // Test dependencies
       "org.apache.iceberg" %% "iceberg-spark-runtime-3.5" % "1.6.1" % "test",
       "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
-      "org.apache.spark" %% "spark-catalyst" % "3.5.1" % "test" classifier "tests",
-      "org.apache.spark" %% "spark-core" % "3.5.1" % "test" classifier "tests",
-      "org.apache.spark" %% "spark-sql" % "3.5.1" % "test" classifier "tests",
-      "org.apache.spark" %% "spark-hive" % "3.5.1" % "test" classifier "tests"
+      "org.apache.spark" %% "spark-catalyst" % "3.5.1" % "test" classifier "tests" exclude("org.apache.parquet", "parquet-common"),
+      "org.apache.spark" %% "spark-core" % "3.5.1" % "test" classifier "tests" exclude("org.apache.parquet", "parquet-common"),
+      "org.apache.spark" %% "spark-sql" % "3.5.1" % "test" classifier "tests" exclude("org.apache.parquet", "parquet-common"),
+      "org.apache.spark" %% "spark-hive" % "3.5.1" % "test" classifier "tests" exclude("org.apache.parquet", "parquet-common")
     )
   )
 
