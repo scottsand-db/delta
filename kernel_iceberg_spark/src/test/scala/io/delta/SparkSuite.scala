@@ -107,9 +107,9 @@ class SparkSuite extends QueryTest with SharedSparkSession {
         .mode("append")
         .saveAsTable(tableIdentifier)
 
-      logger.info("SHOWING DELTA TABLE READ")
+      logger.info("SHOWING ICEBERG TABLE READ")
 
-      spark.read.format("delta").load(tableLocation).show()
+      spark.read.format("iceberg").table(tableIdentifier).show()
     }
   }
 
