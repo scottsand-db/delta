@@ -80,7 +80,7 @@ class DeltaTableScan extends SimpleScan<DeltaTableScan> {
     ResidualEvaluator residualEval = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
 
     CloseableIterable<FilteredColumnarBatch> batches =
-        CloseableIterable.fromLambda(() -> scan.getScanFiles(deltaEngine, true));
+        DeltaFileUtil.fromLambda(() -> scan.getScanFiles(deltaEngine, true));
 
     CloseableIterable<CloseableIterable<Pair<DataFile, DeleteFile>>> fileBatches =
         CloseableIterable.transform(

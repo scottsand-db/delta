@@ -33,11 +33,14 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.SingleAction;
 import io.delta.kernel.internal.data.GenericRow;
 import io.delta.kernel.internal.util.PartitionUtils;
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import org.apache.commons.compress.utils.Lists;
 import org.apache.iceberg.BaseFileScanTask;
@@ -51,16 +54,15 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.ScanTask;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
-import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.ResidualEvaluator;
+import org.apache.iceberg.io.CloseableGroup;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
-import org.apache.iceberg.types.Conversions;
-import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.JsonUtil;
 import org.apache.iceberg.util.Pair;
@@ -161,12 +163,12 @@ public class DeltaFileUtil {
       String fieldName, Schema schema, Map<Integer, ByteBuffer> bounds, JsonGenerator gen)
       throws IOException {
     gen.writeObjectFieldStart(fieldName);
-    for (Map.Entry<Integer, ByteBuffer> entry : bounds.entrySet()) {
-      int id = entry.getKey();
-      Type.PrimitiveType type = schema.findType(id).asPrimitiveType();
-      gen.writeFieldName(schema.findColumnName(id));
-      JsonUtil.writeValue(type, Conversions.fromByteBuffer(type, entry.getValue()), gen);
-    }
+    //    for (Map.Entry<Integer, ByteBuffer> entry : bounds.entrySet()) {
+    //      int id = entry.getKey();
+    //      Type.PrimitiveType type = schema.findType(id).asPrimitiveType();
+    //      gen.writeFieldName(schema.findColumnName(id));
+    //      JsonUtil.writeValue(type, Conversions.fromByteBuffer(type, entry.getValue()), gen);
+    //    }
     gen.writeEndObject();
   }
 
@@ -204,10 +206,31 @@ public class DeltaFileUtil {
         });
   }
 
+  public static class LambdaGroup<E, C extends Iterator<E> & Closeable> extends CloseableGroup
+      implements CloseableIterable<E> {
+    private final Supplier<C> supplier;
+
+    public LambdaGroup(Supplier<C> supplier) {
+      this.supplier = supplier;
+    }
+
+    @Override
+    public CloseableIterator<E> iterator() {
+      C iter = supplier.get();
+      addCloseable(iter);
+      return CloseableIterator.withClose(iter);
+    }
+  }
+
+  public static <E, C extends Iterator<E> & Closeable> CloseableIterable<E> fromLambda(
+      Supplier<C> newIterator) {
+    return new LambdaGroup<>(newIterator);
+  }
+
   static CloseableIterable<Pair<DataFile, DeleteFile>> files(
       String baseLocation, Schema schema, PartitionSpec spec, FilteredColumnarBatch batch) {
     return CloseableIterable.transform(
-        CloseableIterable.fromLambda(batch::getRows),
+        fromLambda(batch::getRows),
         row -> {
           Row add = row.getStruct(0);
 
@@ -306,13 +329,14 @@ public class DeltaFileUtil {
     ImmutableMap.Builder<Integer, ByteBuffer> bounds = ImmutableMap.builder();
     Iterable<Map.Entry<String, JsonNode>> fields = node::fields;
     for (Map.Entry<String, JsonNode> entry : fields) {
-      Types.NestedField field = schema.findField(entry.getKey());
-      if (field != null) {
-        Object value = asJava(entry.getValue());
-        if (value != null) {
-          bounds.put(field.fieldId(), Expressions.literal(value).to(field.type()).toByteBuffer());
-        }
-      }
+      //      Types.NestedField field = schema.findField(entry.getKey());
+      //      if (field != null) {
+      //        Object value = asJava(entry.getValue());
+      //        if (value != null) {
+      //          bounds.put(field.fieldId(),
+      // Expressions.literal(value).to(field.type()).toByteBuffer());
+      //        }
+      //      }
     }
 
     return bounds.build();

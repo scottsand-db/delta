@@ -36,7 +36,7 @@ class InMemoryCloseableIterable<E> implements CloseableIterable<E> {
   @Override
   public CloseableIterator<E> iterator() {
     Iterator<E> iter = iterable.iterator();
-    return new CloseableIterator<>() {
+    return new CloseableIterator<E>() {
       @Override
       public boolean hasNext() {
         return iter.hasNext();

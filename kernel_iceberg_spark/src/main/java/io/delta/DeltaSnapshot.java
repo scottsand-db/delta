@@ -240,7 +240,7 @@ class DeltaSnapshot implements Snapshot, HistoryEntry {
   }
 
   boolean columnMappingEnabled() {
-    return ColumnMapping.COLUMN_MAPPING_MODE_NAME.equals(
+    return ColumnMapping.ColumnMappingMode.NAME.equals(
         ColumnMapping.getColumnMappingMode(metadata.getConfiguration()));
   }
 

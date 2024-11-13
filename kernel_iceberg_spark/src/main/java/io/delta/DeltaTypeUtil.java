@@ -33,8 +33,6 @@ import io.delta.kernel.types.MapType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
-import io.delta.kernel.types.TimestampNTZType;
-import io.delta.kernel.types.TimestampType;
 import java.util.List;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.types.Type;
@@ -104,12 +102,6 @@ public class DeltaTypeUtil {
       case DATE:
         return DateType.DATE;
       case TIMESTAMP:
-      case TIMESTAMP_NANO:
-        if (((Types.TimestampType) type).shouldAdjustToUTC()) {
-          return TimestampType.TIMESTAMP;
-        } else {
-          return TimestampNTZType.TIMESTAMP_NTZ;
-        }
       case STRING:
       case UUID:
         return StringType.STRING;

@@ -33,7 +33,6 @@ import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ByteBuffers;
-import org.apache.iceberg.util.DateTimeUtil;
 
 public class DeltaExpressionUtil {
   private DeltaExpressionUtil() {}
@@ -172,14 +171,6 @@ public class DeltaExpressionUtil {
           return io.delta.kernel.expressions.Literal.ofTimestamp((Long) value);
         } else {
           return io.delta.kernel.expressions.Literal.ofTimestampNtz((Long) value);
-        }
-      case TIMESTAMP_NANO:
-        if (((Types.TimestampNanoType) type).shouldAdjustToUTC()) {
-          return io.delta.kernel.expressions.Literal.ofTimestamp(
-              DateTimeUtil.nanosToMicros((Long) value));
-        } else {
-          return io.delta.kernel.expressions.Literal.ofTimestampNtz(
-              DateTimeUtil.nanosToMicros((Long) value));
         }
       case STRING:
         return io.delta.kernel.expressions.Literal.ofString((String) value);
