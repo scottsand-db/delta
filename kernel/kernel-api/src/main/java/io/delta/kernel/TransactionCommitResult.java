@@ -27,6 +27,7 @@ import io.delta.kernel.utils.CloseableIterable;
  */
 @Evolving
 public class TransactionCommitResult {
+
   private final long version;
   private final boolean isReadyForCheckpoint;
 
@@ -53,5 +54,15 @@ public class TransactionCommitResult {
    */
   public boolean isReadyForCheckpoint() {
     return isReadyForCheckpoint;
+  }
+
+  @Override
+  public String toString() {
+    return "TransactionCommitResult{"
+        + "version="
+        + version
+        + ", isReadyForCheckpoint="
+        + isReadyForCheckpoint
+        + '}';
   }
 }

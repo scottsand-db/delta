@@ -74,12 +74,12 @@ public class InternalScanFileUtils {
   private static final StructType ADD_FILE_SCHEMA =
       (StructType) SCAN_FILE_SCHEMA.get("add").getDataType();
 
-  private static final int ADD_FILE_PATH_ORDINAL = ADD_FILE_SCHEMA.indexOf("path");
+  public static final int ADD_FILE_PATH_ORDINAL = ADD_FILE_SCHEMA.indexOf("path");
 
-  private static final int ADD_FILE_PARTITION_VALUES_ORDINAL =
+  public static final int ADD_FILE_PARTITION_VALUES_ORDINAL =
       ADD_FILE_SCHEMA.indexOf("partitionValues");
 
-  private static final int ADD_FILE_SIZE_ORDINAL = ADD_FILE_SCHEMA.indexOf("size");
+  public static final int ADD_FILE_SIZE_ORDINAL = ADD_FILE_SCHEMA.indexOf("size");
 
   private static final int ADD_FILE_MOD_TIME_ORDINAL = ADD_FILE_SCHEMA.indexOf("modificationTime");
 
@@ -130,7 +130,7 @@ public class InternalScanFileUtils {
    * @return {@link Row} representing the {@code AddFile}
    * @throws IllegalArgumentException If the scan file row doesn't contain {@code add} file entry.
    */
-  protected static Row getAddFileEntry(Row scanFileInfo) {
+  public static Row getAddFileEntry(Row scanFileInfo) {
     if (scanFileInfo.isNullAt(ADD_FILE_ORDINAL)) {
       throw new IllegalArgumentException("There is no `add` entry in the scan file row");
     }

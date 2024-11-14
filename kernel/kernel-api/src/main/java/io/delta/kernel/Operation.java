@@ -29,6 +29,8 @@ public enum Operation {
   /** Recorded during batch inserts. */
   WRITE("WRITE"),
 
+  DELETE("DELETE"),
+
   /** Recorded during streaming inserts. */
   STREAMING_UPDATE("STREAMING UPDATE"),
 

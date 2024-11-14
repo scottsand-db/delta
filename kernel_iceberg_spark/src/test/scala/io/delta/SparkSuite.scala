@@ -27,10 +27,13 @@ class SparkSuite extends QueryTest with SharedSparkSession {
       .set("spark.sql.catalog.my_catalog.catalog-impl", "io.delta.DeltaCatalog") // Implement with DeltaCatalog
       .set("spark.sql.catalog.my_catalog.warehouse", "/tmp/spark_warehouse") // Define warehouse path for Iceberg
       .set("spark.sql.defaultCatalog", "my_catalog") // Set my_catalog as the default
-      .set("spark.driver.extraJavaOptions", "-XX:+IgnoreUnrecognizedVMOptions")
+      .set("spark.driver.extraJavaOptions", "-XX:+IgnoreUnrecognizedVMOptions -Dlog4j.logger.org.apache.spark=DEBUG")
+      .set("spark.executor.extraJavaOptions", "-Dlog4j.logger.org.apache.spark=DEBUG")
       .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .set("spark.databricks.delta.testOnly.dataFileNamePrefix", "test_file_prefix_") // The %25 was causing encoding errors?
       .set("spark.sql.parquet.enableVectorizedReader", "false")
+      .set("spark.eventLog.enabled", "true")
+      .set("spark.eventLog.dir", "/tmp/spark_event_log")
   }
 
   def withTableNameAndLocation(test: (String, String) => Unit): Unit = {
@@ -68,16 +71,12 @@ class SparkSuite extends QueryTest with SharedSparkSession {
 
       logger.info("SHOWING ICEBERG TABLE READ")
 
-      spark.read.format("iceberg").table(tableIdentifier).show()
-
-      logger.info("SHOWING DELTA TABLE READ")
-
-      spark.read.format("delta").load(tableLocation).show()
+      spark.read.format("iceberg").table(tableIdentifier).where("id > 5").show()
     }
   }
 
   // PARTITIONED WRITE THEN READ
-  test("aaa2") {
+  test("bbb") {
     withTableNameAndLocation { (tableName, tableLocation) =>
       val tableIdentifier = s"my_catalog.$tableName"
       spark.sql(s"CREATE TABLE $tableIdentifier (part1 BIGINT, col1 BIGINT, col2 BIGINT, col3 BIGINT) " +
@@ -95,7 +94,7 @@ class SparkSuite extends QueryTest with SharedSparkSession {
       }
 
       spark
-        .range(10)
+        .range(50)
         .withColumn("part1", col("id") % 5)
         .withColumn("col1", col("id"))
         .withColumn("col2", col("id") * 10)
@@ -109,12 +108,48 @@ class SparkSuite extends QueryTest with SharedSparkSession {
 
       logger.info("SHOWING ICEBERG TABLE READ")
 
+      spark.read.format("iceberg").table(tableIdentifier).where("part1 > 2").show()
+    }
+  }
+
+  test("ccc") {
+    withTableNameAndLocation { (tableName, tableLocation) =>
+      val tableIdentifier = s"my_catalog.$tableName"
+      spark.sql(s"CREATE TABLE $tableIdentifier (part1 BIGINT, col1 BIGINT, col2 BIGINT, col3 BIGINT) " +
+        s"USING iceberg " +
+        s"LOCATION '$tableLocation' " +
+        s"PARTITIONED BY (part1)")
+
+      logger.info(s"Scott > Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
+
+      spark
+        .range(50)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id"))
+        .withColumn("col2", col("id") * 10)
+        .withColumn("col3", col("id") * 100)
+        .drop("id")
+        .write
+        .format("iceberg")
+        .partitionBy("part1")
+        .option("path", tableLocation)
+        .mode("append")
+        .saveAsTable(tableIdentifier)
+
+      logger.info("SHOWING ICEBERG TABLE READ")
+
       spark.read.format("iceberg").table(tableIdentifier).show()
+
+      log.info("Scott > DELETING FROM THE TABLE ....")
+
+      spark.sql(s"DELETE FROM $tableIdentifier WHERE part1 = 2")
+
+      spark.read.format("iceberg").table(tableIdentifier).show(numRows = 100, truncate = false)
     }
   }
 
   // SIMPLE CASE: write via delta-spark dsv1 and read via iceberg + DeltaCatalog dsv2
-  test("bbb") {
+  test("zzz") {
     withTableNameAndLocation { (tableName, tableLocation) =>
       spark.range(10).write.format("delta").save(tableLocation)
 
@@ -125,7 +160,7 @@ class SparkSuite extends QueryTest with SharedSparkSession {
   }
 
   // PARTITIONED CASE: write via delta-spark dsv1 and read via iceberg + DeltaCatalog dsv2
-  test("ccc") {
+  test("yyy") {
     withTableNameAndLocation { (tableName, tableLocation) =>
       val tableIdentifier = s"my_catalog.$tableName"
       // scalastyle:off line.size.limit

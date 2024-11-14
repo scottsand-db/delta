@@ -27,7 +27,6 @@ import io.delta.kernel.exceptions.KernelException;
 import io.delta.kernel.internal.actions.Metadata;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.UUID;
@@ -65,13 +64,9 @@ import org.apache.iceberg.encryption.PlaintextEncryptionManager;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
-import org.apache.iceberg.mapping.NameMapping;
-import org.apache.iceberg.mapping.NameMappingParser;
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.util.DateTimeUtil;
-import org.apache.iceberg.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -216,16 +211,22 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public Map<Integer, PartitionSpec> specs() {
+    LOG.info("Scott > DeltaTable > specs :: spec {} spec.isPartitioned {}", spec(),
+        spec().isPartitioned());
+
     PartitionSpec spec = spec();
+    Map<Integer, PartitionSpec> result;
     if (spec.isPartitioned()) {
-      return ImmutableMap.of(
-          PartitionSpec.unpartitioned().specId(),
-          PartitionSpec.unpartitioned(),
+      result = ImmutableMap.of(
+//          PartitionSpec.unpartitioned().specId(),
+//          PartitionSpec.unpartitioned(),
           spec.specId(),
           spec);
     } else {
-      return ImmutableMap.of(spec.specId(), spec);
+      result = ImmutableMap.of(spec.specId(), spec);
     }
+    LOG.info("Scott > DeltaTable > result {}", result);
+    return result;
   }
 
   @Override
@@ -347,7 +348,8 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public DeleteFiles newDelete() {
-    throw new UnsupportedOperationException("Not yet supported");
+    LOG.info("Scott > DeltaTable > newDelete");
+    return new DeltaDeleteFiles(this, deltaTable, deltaEngine);
   }
 
   @Override
