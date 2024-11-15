@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
-import org.apache.hadoop.shaded.com.google.common.collect.Iterables;
 import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.EnvironmentContext;
@@ -144,8 +143,6 @@ public class DeltaDeleteFiles implements DeleteFiles {
     icebergDeltaTable.refresh();
 
     removeFileSingleActionRows.forEach(row -> LOG.info("RemoveRow: {}", JsonUtils.rowToJson(row)));
-
-    long now = System.currentTimeMillis();
 
     TransactionCommitResult result = kernelDeltaTable
       .createTransactionBuilder(kernelEngine, engineInfo(), Operation.DELETE)

@@ -1,6 +1,7 @@
 package io.delta
 
 
+import org.apache.iceberg.{PartitionSpec, Schema}
 import org.apache.iceberg.catalog.TableIdentifier
 import org.apache.spark.SparkConf
 
@@ -8,6 +9,8 @@ import java.util.UUID
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
+
+import scala.collection.JavaConverters._
 
 object SparkSuite {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
@@ -113,6 +116,8 @@ class SparkSuite extends QueryTest with SharedSparkSession {
   }
 
   test("ccc") {
+    import scala.Predef._
+
     withTableNameAndLocation { (tableName, tableLocation) =>
       val tableIdentifier = s"my_catalog.$tableName"
       spark.sql(s"CREATE TABLE $tableIdentifier (part1 BIGINT, col1 BIGINT, col2 BIGINT, col3 BIGINT) " +
@@ -121,6 +126,58 @@ class SparkSuite extends QueryTest with SharedSparkSession {
         s"PARTITIONED BY (part1)")
 
       logger.info(s"Scott > Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
+
+      (1 to 7).foreach { x =>
+        logger.info(s"SCOTT > STARTING COMMIT #$x")
+
+        spark
+          .range(x.toLong * 50)
+          .withColumn("part1", col("id") % 5)
+          .withColumn("col1", col("id"))
+          .withColumn("col2", col("id") * 10)
+          .withColumn("col3", col("id") * 100)
+          .drop("id")
+          .write
+          .format("iceberg")
+          .partitionBy("part1")
+          .option("path", tableLocation)
+          .mode("append")
+          .saveAsTable(tableIdentifier)
+
+        logger.info(s"SCOTT > FINISHED COMMIT #$x")
+      }
+
+      logger.info("SHOWING ICEBERG TABLE READ")
+
+      spark.read.format("iceberg").table(tableIdentifier).show()
+
+      log.info("Scott > DELETING FROM THE TABLE ....")
+
+      spark.sql(s"DELETE FROM $tableIdentifier WHERE part1 = 2")
+
+      spark.read.format("iceberg").table(tableIdentifier).show(numRows = 100, truncate = false)
+
+      val deltaTableAsIcebergTable = new io.delta.DeltaTable(
+        TableIdentifier.of(tableIdentifier), spark.sessionState.newHadoopConf(), tableLocation);
+
+      deltaTableAsIcebergTable.snapshots().forEach { snapshot =>
+        logger.info(s"Snapshot ID: ${snapshot.snapshotId()}")
+        logger.info(s"Timestamp: ${snapshot.timestampMillis()}")
+        logger.info(s"Operation: ${snapshot.operation()}")
+        logger.info(s"Summary: ${snapshot.summary()}")
+      }
+    }
+  }
+
+  test("ddd") {
+    withTableNameAndLocation { (tableName, tableLocation) =>
+      val tableIdentifier = s"my_catalog.$tableName"
+      spark.sql(s"CREATE TABLE $tableIdentifier (part1 BIGINT, col1 BIGINT, col2 BIGINT, col3 BIGINT) " +
+        s"USING iceberg " +
+        s"LOCATION '$tableLocation' " +
+        s"PARTITIONED BY (part1)")
+
+      logger.info(s"Scott >> Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
 
       spark
         .range(50)
@@ -136,15 +193,32 @@ class SparkSuite extends QueryTest with SharedSparkSession {
         .mode("append")
         .saveAsTable(tableIdentifier)
 
-      logger.info("SHOWING ICEBERG TABLE READ")
+      logger.info("STARTING ICEBERG TABLE UPDATE")
 
+      val deltaTableAsIcebergTable = new io.delta.DeltaTable(
+        TableIdentifier.of(tableIdentifier), spark.sessionState.newHadoopConf(), tableLocation);
+
+      logger.info(s"Scott > SCHEMA ${deltaTableAsIcebergTable.schema()}")
+      logger.info(s"Scott > SPEC ${deltaTableAsIcebergTable.spec()}")
+
+      def checkCompatibility(spec: PartitionSpec, schema: Schema): Unit = {
+        for (field <- spec.fields().asScala) {
+          val sourceType = schema.findType(field.sourceId())
+          val transform = field.transform()
+          logger.info(s"Scott > field $field, sourceType $sourceType, transform $transform")
+        }
+      }
+      checkCompatibility(deltaTableAsIcebergTable.spec(), deltaTableAsIcebergTable.schema())
+      spark.sql(s"UPDATE $tableIdentifier SET col1 = 8 WHERE col1 = 5")
       spark.read.format("iceberg").table(tableIdentifier).show()
+    }
+  }
 
-      log.info("Scott > DELETING FROM THE TABLE ....")
-
-      spark.sql(s"DELETE FROM $tableIdentifier WHERE part1 = 2")
-
-      spark.read.format("iceberg").table(tableIdentifier).show(numRows = 100, truncate = false)
+  def checkCompatibility(spec: PartitionSpec, schema: Schema): Unit = {
+    for (field <- spec.fields().asScala) {
+      val sourceType = schema.findType(field.sourceId())
+      val transform = field.transform()
+      logger.info(s"Scott > field $field, sourceType $sourceType, transform $transform")
     }
   }
 

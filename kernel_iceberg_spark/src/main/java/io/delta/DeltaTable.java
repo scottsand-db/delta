@@ -188,18 +188,21 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public Map<Integer, Schema> schemas() {
-    throw new RuntimeException("DeltaTable::schemas called");
+    LOG.info("Scott > DeltaTable > schemas");
+//    throw new RuntimeException("DeltaTable::schemas called");
 //
-//    // load all available snapshots
-//    loadAllSnapshots();
-//
-//    ImmutableMap.Builder<Integer, Schema> schemas = ImmutableMap.builder();
-//    for (DeltaSnapshot snapshot : snapshots.asMap().values()) {
-//      Schema snapshotSchema = snapshot.schema();
-//      schemas.put(snapshotSchema.schemaId(), snapshotSchema);
-//    }
-//
-//    return schemas.build();
+    // load all available snapshots
+    loadAllSnapshots();
+
+    ImmutableMap.Builder<Integer, Schema> schemas = ImmutableMap.builder();
+    for (DeltaSnapshot snapshot : snapshots.asMap().values()) {
+      Schema snapshotSchema = snapshot.schema();
+      schemas.put(snapshotSchema.schemaId(), snapshotSchema);
+    }
+
+    LOG.info("Scott > DeltaTable > schemas :: schemas {}", schemas.build());
+
+    return schemas.build();
   }
 
   @Override
@@ -323,7 +326,8 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public RewriteFiles newRewrite() {
-    throw new UnsupportedOperationException("Not yet supported");
+    LOG.info("Scott > DeltaTable > newRewrite");
+    return new DeltaRewriteFiles(this, deltaTable, deltaEngine);
   }
 
   @Override
