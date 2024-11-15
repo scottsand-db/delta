@@ -35,6 +35,34 @@ public class TableConfig<T> {
   //////////////////
 
   /**
+   * The protocol reader version modeled as a table property. This property is *not* stored as a
+   * table property in the `Metadata` action. It is stored as its own action. Having it modeled as a
+   * table property makes it easier to upgrade and view the version.
+   */
+  public static final TableConfig<Integer> MIN_READER_VERSION =
+      new TableConfig<>(
+          "delta.minReaderVersion",
+          "1",
+          Integer::valueOf,
+          value -> 1 <= value && value <= 3,
+          "TODO",
+          true);
+
+  /**
+   * The protocol writer version modeled as a table property. This property is *not* stored as a
+   * table property in the `Metadata` action. It is stored as its own action. Having it modeled as a
+   * table property makes it easier to upgrade and view the version.
+   */
+  public static final TableConfig<Integer> MIN_WRITER_VERSION =
+      new TableConfig<>(
+          "delta.minWriterVersion",
+          "2",
+          Integer::valueOf,
+          value -> 2 <= value && value <= 7,
+          "TODO",
+          true);
+
+  /**
    * The shortest duration we have to keep logically deleted data files around before deleting them
    * physically.
    *
@@ -221,6 +249,8 @@ public class TableConfig<T> {
       Collections.unmodifiableMap(
           new HashMap<String, TableConfig<?>>() {
             {
+              addConfig(this, MIN_READER_VERSION);
+              addConfig(this, MIN_WRITER_VERSION);
               addConfig(this, TOMBSTONE_RETENTION);
               addConfig(this, CHECKPOINT_INTERVAL);
               addConfig(this, IN_COMMIT_TIMESTAMPS_ENABLED);

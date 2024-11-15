@@ -10,6 +10,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
+import scala.Predef.wrapString
 import scala.collection.JavaConverters._
 
 object SparkSuite {
@@ -219,6 +220,53 @@ class SparkSuite extends QueryTest with SharedSparkSession {
       val sourceType = schema.findType(field.sourceId())
       val transform = field.transform()
       logger.info(s"Scott > field $field, sourceType $sourceType, transform $transform")
+    }
+  }
+
+  test("eee") {
+    withTableNameAndLocation { (tableName, tableLocation) =>
+      val tableIdentifier = s"my_catalog.$tableName"
+      spark.sql(
+        s"""
+           |CREATE TABLE $tableIdentifier (
+           |  part1 BIGINT,
+           |  col1 BIGINT,
+           |  col2 BIGINT,
+           |  col3 BIGINT
+           |)
+           |USING iceberg
+           |LOCATION '$tableLocation'
+           |PARTITIONED BY (part1)
+           |TBLPROPERTIES (
+           |  'delta.minReaderVersion' = '2',
+           |  'delta.minWriterVersion' = '5',
+           |  'delta.columnMapping.mode' = 'name'
+           |)
+        """.stripMargin)
+
+      logger.info(s"Scott >> Created ICEBERG CATALOG TABLE with tableIdentifier $tableIdentifier")
+
+      logger.info("Scott > Calling DESCRIBE EXTENDED")
+
+      spark.sql(s"DESCRIBE EXTENDED $tableIdentifier").show(truncate = false)
+
+      logger.info("Scott > Calling TBLPROPERTIES")
+
+      spark.sql(s"SHOW TBLPROPERTIES $tableIdentifier").show(truncate = false)
+
+//      spark
+//        .range(50)
+//        .withColumn("part1", col("id") % 5)
+//        .withColumn("col1", col("id"))
+//        .withColumn("col2", col("id") * 10)
+//        .withColumn("col3", col("id") * 100)
+//        .drop("id")
+//        .write
+//        .format("iceberg")
+//        .partitionBy("part1")
+//        .option("path", tableLocation)
+//        .mode("append")
+//        .saveAsTable(tableIdentifier)
     }
   }
 

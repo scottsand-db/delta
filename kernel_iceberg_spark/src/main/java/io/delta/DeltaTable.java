@@ -244,6 +244,8 @@ public class DeltaTable implements org.apache.iceberg.Table {
 
   @Override
   public Map<String, String> properties() {
+    LOG.info("Scott > DeltaTable > properties. currentVersion {}", currentVersion);
+
     return asProperties(currentVersion.metadata());
   }
 
@@ -258,6 +260,8 @@ public class DeltaTable implements org.apache.iceberg.Table {
     metadata
         .getCreatedTime()
         .ifPresent(ts -> builder.put("created-at", DateTimeUtil.formatTimestampMillis(ts)));
+
+    LOG.info("Scott > DeltaTable > asProperties :: build result {}", builder.build());
 
     return builder.build();
   }

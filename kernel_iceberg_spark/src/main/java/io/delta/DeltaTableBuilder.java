@@ -4,6 +4,7 @@ import io.delta.kernel.Operation;
 import io.delta.kernel.defaults.engine.DefaultEngine;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.utils.CloseableIterable;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,6 +26,7 @@ public class DeltaTableBuilder implements TableBuilder {
   private final TableIdentifier identifier;
   private final Schema schema;
   private final Configuration conf;
+  private final Map<String, String> properties = new HashMap<>();
 
   private PartitionSpec partitionSpec = null;
   private String location = null;
@@ -57,12 +59,14 @@ public class DeltaTableBuilder implements TableBuilder {
   @Override
   public TableBuilder withProperties(Map<String, String> properties) {
     LOG.info("Scott > DeltaTableBuilder > withProperties :: {}", properties);
+    this.properties.putAll(properties);
     return this;
   }
 
   @Override
   public TableBuilder withProperty(String key, String value) {
     LOG.info("Scott > DeltaTableBuilder > withProperty :: {}->{}", key, value);
+    this.properties.put(key, value);
     return this;
   }
 
@@ -82,6 +86,18 @@ public class DeltaTableBuilder implements TableBuilder {
       txnBuilder = txnBuilder.withPartitionColumns(engine, partSpecNames);
 
       LOG.info("Scott > DeltaTableBuilder > create :: partSpecNames {}", partSpecNames);
+    }
+
+    if (!properties.isEmpty()) {
+      Map<String, String> filteredProperties = properties.entrySet().stream().filter(e -> {
+        String key = e.getKey();
+        return key.startsWith("delta.");
+      }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+      txnBuilder = txnBuilder.withTableProperties(engine, filteredProperties);
+
+      LOG.info("Scott > DeltaTableBuilder > create :: total properties {}", properties);
+      LOG.info("Scott > DeltaTableBuilder > create :: filtered properties {}", filteredProperties);
     }
 
     txnBuilder.build(engine).commit(engine, CloseableIterable.emptyIterable());
