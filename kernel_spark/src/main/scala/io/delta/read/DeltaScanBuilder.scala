@@ -16,7 +16,7 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
   import DeltaScanBuilder._
 
   private val readSnapshot = kernelTable.getLatestSnapshot(tableEngine)
-  private val scanBuilder = readSnapshot.getScanBuilder(tableEngine)
+  private var scanBuilder = readSnapshot.getScanBuilder(tableEngine)
   private var sparkSchema =
     SchemaUtils.convertKernelSchemaToSparkSchema(readSnapshot.getSchema(tableEngine))
   private var pushedSparkPredicates = Array.empty[Predicate]
@@ -36,7 +36,7 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
     logger.info(s"Pruning columns for required schema: $requiredSchema")
 
     sparkSchema = requiredSchema
-    scanBuilder.withReadSchema(
+    scanBuilder = scanBuilder.withReadSchema(
       tableEngine,
       SchemaUtils.convertSparkSchemaToKernelSchema(sparkSchema))
   }
@@ -50,12 +50,20 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
    * predicates must be interpreted as ANDed together.
    */
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    logger.info(s"pushPredicates(): predicates=$predicates")
+    logger.info(s"pushPredicates(): predicates=${predicates.mkString("Array(", ", ", ")")}")
+    predicates.foreach(p => logger.info(s"predicate $p, name: ${p.name()}"))
 
     val sparkToKernelPredicates =
       predicates.map(p => p -> ExpressionUtils.convertStoKPredicate(p)).collect {
         case (sparkPredicate, Some(kernelPredicate)) => sparkPredicate -> kernelPredicate
       }
+
+    logger.info(s"input predicates size: ${predicates.size}")
+    logger.info(s"converted predicates size: ${sparkToKernelPredicates.size}")
+
+    if (predicates.length != sparkToKernelPredicates.length) {
+      logger.warn("Some predicates could not be converted to kernel predicates")
+    }
 
     logger.info(s"sparkToKernelPredicatesMap: ${sparkToKernelPredicates.mkString(", ")}")
 
@@ -66,29 +74,26 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
     logger.info(s"Pushing down predicates: $kernelAndOpt")
 
     if (kernelAndOpt.nonEmpty) {
-      scanBuilder.withFilter(tableEngine, kernelAndOpt.get)
+      scanBuilder = scanBuilder.withFilter(tableEngine, kernelAndOpt.get)
       val scan = scanBuilder.build()
+      val kernelPushedOpt = scan.asInstanceOf[ScanImpl].getPartitionsFilters()
       val kernelRemainingOpt = scan.getRemainingFilter
 
+      logger.info(s"kernelPushedOpt: $kernelPushedOpt")
       logger.info(s"kernelRemainingOpt: $kernelRemainingOpt")
 
-      val kernelPushedOpt = scan.asInstanceOf[ScanImpl].getPartitionsFilters()
-
       if (kernelPushedOpt.isPresent) {
-        logger.info(s"pushed partition filters: ${kernelPushedOpt.get()}")
-        ExpressionUtils.convertKtoSPredicate(kernelPushedOpt.get()).map { pushed =>
+        logger.info("kernelPushedOpt is non-empty")
+
+        ExpressionUtils.convertKtoSPredicate(kernelPushedOpt.get()).foreach { pushed =>
           pushedSparkPredicates = Array(pushed)
         }
       }
-//      else {
-//        // HACK that works for a basic, trivial case
-//        logger.info("Kernel pushed is empty, returning original predicates input")
-//        return predicates
-//      }
 
       if (kernelRemainingOpt.isPresent) {
-        val sparkRemainingOpt = ExpressionUtils.convertKtoSPredicate(kernelRemainingOpt.get())
+        logger.info("kernelRemainingOpt is non-empty")
 
+        val sparkRemainingOpt = ExpressionUtils.convertKtoSPredicate(kernelRemainingOpt.get())
         logger.info(s"sparkRemainingOpt: ${sparkRemainingOpt.toArray.mkString(", ")}")
 
         sparkRemainingOpt.toArray

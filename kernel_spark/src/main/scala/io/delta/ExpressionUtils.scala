@@ -124,11 +124,16 @@ object ExpressionUtils {
           right <- convertStoKPredicate(expr.right())
         } yield new KernelOr(left, right)
 
-      case expr: SparkPredicate if expr.name() == "=" =>
+      case expr: SparkPredicate if KernelPredicate.BINARY_OPERATORS.contains(expr.name()) =>
         for {
           left <- convertStoKExpr(expr.children()(0))
           right <- convertStoKExpr(expr.children()(1))
-        } yield new KernelPredicate("=", left, right)
+        } yield new KernelPredicate(expr.name(), left, right)
+
+      case expr: SparkPredicate if KernelPredicate.UNARY_OPERATORS.contains(expr.name()) =>
+        for {
+          child <- convertStoKExpr(expr.children()(0))
+        } yield new KernelPredicate(expr.name(), child)
 
       case c: SparkNamedReference =>
         Some(new KernelColumn(c.fieldNames))

@@ -6,30 +6,34 @@ import io.delta.kernel.internal.util.VectorUtils
 import io.delta.read.DeltaScanBuilder
 import io.delta.write.DeltaWriteBuilder
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import scala.collection.JavaConverters._
 
-class DeltaTable(path: String) extends Table with SupportsWrite with SupportsRead {
+class DeltaTable(path: String)
+    extends Table
+    with SupportsWrite
+    with SupportsRead
+    with SupportsRowLevelOperations {
   import io.delta.DeltaTable._
 
-  private lazy val engine =
+  private lazy val kernelEngine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
 
-  private lazy val table =
-    io.delta.kernel.Table.forPath(engine, path)
+  private lazy val kernelTable =
+    io.delta.kernel.Table.forPath(kernelEngine, path)
 
   override def name(): String = s"delta.`$path`"
 
   override def schema(): StructType = {
     try {
       val schema = SchemaUtils.convertKernelSchemaToSparkSchema(
-        table.getLatestSnapshot(engine).getSchema(engine))
+        kernelTable.getLatestSnapshot(kernelEngine).getSchema(kernelEngine))
       logger.info(s"schema: $schema")
       schema
     } catch {
@@ -46,14 +50,14 @@ class DeltaTable(path: String) extends Table with SupportsWrite with SupportsRea
 
   override def newWriteBuilder(writeInfo: LogicalWriteInfo): WriteBuilder = {
     logger.info(s"newWriteBuilder: writeInfo=$writeInfo")
-    new DeltaWriteBuilder(table, writeInfo)
+    new DeltaWriteBuilder(kernelTable, writeInfo)
   }
 
   override def partitioning(): Array[Transform] = {
     try {
       val partColNames = VectorUtils.toJavaList[String](
-        table
-          .getLatestSnapshot(engine)
+        kernelTable
+          .getLatestSnapshot(kernelEngine)
           .asInstanceOf[SnapshotImpl]
           .getMetadata
           .getPartitionColumns)
@@ -74,7 +78,13 @@ class DeltaTable(path: String) extends Table with SupportsWrite with SupportsRea
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     logger.info(s"newScanBuilder: options=${options.entrySet()}")
-    new DeltaScanBuilder(table, engine)
+    new DeltaScanBuilder(kernelTable, kernelEngine)
+  }
+
+  override def newRowLevelOperationBuilder(
+      info: RowLevelOperationInfo): RowLevelOperationBuilder = {
+    logger.info(s"newRowLevelOperationBuilder: info=$info")
+    new DeltaRowLevelOperationBuilder(kernelTable, kernelEngine, info)
   }
 }
 

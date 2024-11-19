@@ -38,7 +38,7 @@ class ReadSuite extends QueryTest with SharedSparkSession {
   test("bbb") {
     withUniquePath { path =>
       spark
-        .range(10)
+        .range(50)
         .withColumn("part1", col("id") % 5)
         .withColumn("col1", col("id").cast("long"))
         .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
@@ -51,7 +51,7 @@ class ReadSuite extends QueryTest with SharedSparkSession {
 
       // read using DSV2
       // reading using partition filter WORKS, reading using data filter FAILS
-      spark.read.format("delta2").load(path).where("part1 = 1").show()
+      spark.read.format("delta2").load(path).where("part1 = 0 and col1 < 20").show(100)
     }
   }
 
