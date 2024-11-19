@@ -2,6 +2,7 @@ package io.delta
 
 import io.delta.kernel.Operation
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
 import org.apache.spark.sql.types.StructType
@@ -9,7 +10,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import java.util
 import java.util.UUID
-
 import scala.collection.JavaConverters._
 
 class DeltaCatalog extends TableCatalog {
@@ -18,6 +18,10 @@ class DeltaCatalog extends TableCatalog {
   private var catalogName: String = _
   private lazy val engine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+
+  private def tableIdentifierToPath(ident: Identifier): String = {
+    s"/tmp/spark_warehouse/${ident.name()}"
+  }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this.catalogName = name
@@ -28,7 +32,13 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def loadTable(ident: Identifier): Table = {
-    new DeltaTable(ident.name())
+    if (!inMemoryTables.contains(ident.name())) {
+      logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table does not exist")
+      throw new NoSuchTableException(ident)
+    }
+
+    logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table exists")
+    inMemoryTables(ident.name())
   }
 
   override def createTable(
@@ -39,7 +49,7 @@ class DeltaCatalog extends TableCatalog {
     val path = if (properties.containsKey("path")) {
       properties.get("path")
     } else {
-      s"/tmp/table_${UUID.randomUUID().toString.replace("-", "").substring(0, 4)}"
+      tableIdentifierToPath(ident)
     }
 
     logger.info(

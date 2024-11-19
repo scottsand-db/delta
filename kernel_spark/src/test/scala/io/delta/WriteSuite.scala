@@ -6,7 +6,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 import java.util.UUID
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{concat, _}
 import org.apache.spark.sql.test.SharedSparkSession
 
 object WriteSuite {
@@ -29,6 +29,12 @@ class WriteSuite extends QueryTest with SharedSparkSession {
     val path = s"/tmp/delta_tables/table_${UUID.randomUUID().toString.substring(0, 8)}"
     println(s"Using path: $path")
     test(path)
+  }
+
+  def withUniqueTableId(test: String => Unit): Unit = {
+    val tid = s"my_delta_catalog.table_${UUID.randomUUID().toString.substring(0, 8)}"
+    println(s"Using table id: $tid")
+    test(tid)
   }
 
   test("aaa") {
@@ -156,19 +162,22 @@ class WriteSuite extends QueryTest with SharedSparkSession {
 //  }
 
   test("fff") {
-    val tableName = s"table_${UUID.randomUUID().toString.substring(0, 4)}"
-    println(s"using table name $tableName")
+    withUniqueTableId { tid =>
+      spark
+        .range(10)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id").cast("long"))
+        .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
+        .withColumn("col3", col("id") % 2 === 0)
+        .drop("id")
+        .write
+        .format("delta2")
+        .partitionBy("part1")
+        .saveAsTable(tid)
 
-    spark
-      .range(10)
-      .withColumn("part1", col("id") % 5)
-      .withColumn("col1", col("id").cast("long"))
-      .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
-      .withColumn("col3", col("id") % 2 === 0)
-      .drop("id")
-      .write
-      .format("delta2")
-      .partitionBy("part1")
-      .saveAsTable(s"my_delta_catalog.$tableName")
+      logger.info(s"Scott > Table $tid created")
+
+      spark.table(tid).show(100)
+    }
   }
 }
