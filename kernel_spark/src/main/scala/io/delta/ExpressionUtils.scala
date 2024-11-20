@@ -2,7 +2,7 @@ package io.delta
 
 import io.delta.kernel.expressions.{And => KernelAnd, Column => KernelColumn, Expression => KernelExpression, Literal => KernelLiteral, Or => KernelOr, Predicate => KernelPredicate}
 import io.delta.kernel.{types => kerneltypes}
-import org.apache.spark.sql.connector.expressions.{Expression => SparkExpression, Literal => SparkLiteral, NamedReference => SparkNamedReference}
+import org.apache.spark.sql.connector.expressions.{Expressions, Expression => SparkExpression, Literal => SparkLiteral, NamedReference => SparkNamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => SparkAnd, Or => SparkOr, Predicate => SparkPredicate}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{types => sparktypes}
@@ -50,27 +50,18 @@ object ExpressionUtils {
           right <- convertKtoSExpr(expr.getChildren.get(1))
         } yield new SparkPredicate("=", Array(left, right))
 
-      case expr: KernelColumn =>
-        Some(new SparkNamedReference {
-          override def fieldNames(): Array[String] = expr.getNames
-
-          override def children(): Array[SparkExpression] = {
-            expr.getChildren.asScala.map(convertKtoSExpr).flatMap(_.toSeq).toArray
-          }
-
-          override def toString: String = s"SparkNamedReferenced(${fieldNames().mkString(".")})"
-        })
+      case expr: KernelColumn => Some(Expressions.column(expr.getNames.mkString(".")))
 
       case literal: KernelLiteral =>
         literal.getDataType match {
           case _: kerneltypes.BooleanType =>
-            Some(convertKtoSLiteral[Boolean](literal, sparktypes.BooleanType))
+            Some(Expressions.literal(literal.getValue.asInstanceOf[Boolean]))
           case _: kerneltypes.IntegerType =>
-            Some(convertKtoSLiteral[Int](literal, sparktypes.IntegerType))
+            Some(Expressions.literal(literal.getValue.asInstanceOf[Integer]))
           case _: kerneltypes.LongType =>
-            Some(convertKtoSLiteral(literal, sparktypes.LongType))
+            Some(Expressions.literal(literal.getValue.asInstanceOf[Long]))
           case _: kerneltypes.StringType =>
-            Some(convertKtoSLiteral[String](literal, sparktypes.StringType))
+            Some(Expressions.literal(literal.getValue.asInstanceOf[String]))
           case _ => None
         }
 
@@ -80,18 +71,6 @@ object ExpressionUtils {
     logger.info(s"convertKtoSExpr: input=$kernelExpression, result=$result")
 
     result
-  }
-
-  private def convertKtoSLiteral[T](
-      kernelLiteral: KernelLiteral,
-      sparkDataType: sparktypes.DataType): SparkLiteral[T] = {
-    new SparkLiteral[T] {
-      override def value(): T = kernelLiteral.getValue.asInstanceOf[T]
-
-      override def dataType(): DataType = sparkDataType
-
-      override def toString: String = s"SparkLiteral(value=${value()}, dataType=${dataType()})"
-    }
   }
 
   //////////////////////
