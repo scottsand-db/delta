@@ -187,6 +187,40 @@ class WriteSuite extends QueryTest with SharedSparkSession {
       spark.sql(s"DELETE FROM $tid WHERE col1 < 5")
 
       spark.table(tid).orderBy("col1").show(100)
+
+      spark.sql(s"UPDATE $tid SET col1 = 7 where col1 = 6")
+
+      spark.table(tid).orderBy("col1").show(100)
+
+      // Step 4: Perform a MERGE operation
+      logger.info("performing merge")
+
+      // Create a source DataFrame for the merge
+      val sourceDf = spark
+        .range(10)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id"))
+        .withColumn("col2", concat(lit("new_value_"), col("id").cast("string")))
+        .withColumn("col3", col("id") % 2 === 0)
+        .drop("id")
+
+      sourceDf.createOrReplaceTempView("sourceTable")
+
+      // MERGE statement
+      spark.sql(
+        s"""
+           |MERGE INTO $tid AS target
+           |USING sourceTable AS source
+           |ON target.part1 = source.part1 AND target.col1 = source.col1
+           |WHEN MATCHED THEN
+           |  UPDATE SET target.col2 = source.col2, target.col3 = source.col3
+           |WHEN NOT MATCHED THEN
+           |  INSERT (part1, col1, col2, col3) VALUES (source.part1, source.col1, source.col2, source.col3)
+           |""".stripMargin
+      )
+
+      // Display the table after the merge
+      spark.table(tid).orderBy("col1").show(100)
     }
   }
 }
