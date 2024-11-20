@@ -1,19 +1,24 @@
 package io.delta.write
 
-import io.delta.kernel.data.{ColumnVector, FilteredColumnarBatch}
+import io.delta.kernel.data.{ColumnVector, FilteredColumnarBatch, Row => KernelRow}
 import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch
 import io.delta.kernel.defaults.internal.json.JsonUtils
 import io.delta.kernel.expressions.Literal
+import io.delta.kernel.internal.InternalScanFileUtils
+import io.delta.kernel.internal.actions.AddFile.{FULL_SCHEMA => ADD_FILE_SCHEMA}
+import io.delta.kernel.internal.actions.RemoveFile.{FULL_SCHEMA => REMOVE_FILE_SCHEMA}
 import io.delta.kernel.internal.actions.SingleAction
-import io.delta.kernel.internal.data.TransactionStateRow
+import io.delta.kernel.internal.data.{GenericRow, TransactionStateRow}
 import io.delta.kernel.types.{BooleanType, IntegerType, LongType, StringType}
 import io.delta.kernel.utils.{CloseableIterable, CloseableIterator}
 import io.delta.kernel.{Operation, Table => KernelTable, Transaction => KernelTransaction}
+import io.delta.read.{DeltaInputPartition, DeltaScan}
 import io.delta.{AbstractVectorWrapper, DataUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write._
 
+import java.util
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -25,11 +30,18 @@ class DeltaWriteBuilder(kernelTable: KernelTable, logicalWriteInfo: LogicalWrite
     extends WriteBuilder {
   import DeltaWriteBuilder._
 
+  var readScan: Option[DeltaScan] = None
+
+  def injectReadScan(readScan: DeltaScan): Unit = {
+    this.readScan = Some(readScan)
+  }
+
   override def build(): Write = {
     // TODO: validate Spark schema is compatible with the Delta table: logicalWriteInfo.schema()
     logger.info(s"build")
-    new DeltaWrite(kernelTable, logicalWriteInfo)
+    new DeltaWrite(kernelTable, logicalWriteInfo, readScan)
   }
+
 }
 
 object DeltaWriteBuilder {
@@ -39,12 +51,16 @@ object DeltaWriteBuilder {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-class DeltaWrite(kernelTable: KernelTable, logicalWriteInfo: LogicalWriteInfo) extends Write {
+class DeltaWrite(
+    kernelTable: KernelTable,
+    logicalWriteInfo: LogicalWriteInfo,
+    readScan: Option[DeltaScan])
+    extends Write {
   import DeltaWrite._
 
   override def toBatch: BatchWrite = {
     logger.info(s"toBatch")
-    new DeltaBatchWrite(kernelTable, logicalWriteInfo)
+    new DeltaBatchWrite(kernelTable, logicalWriteInfo, readScan)
   }
 }
 
@@ -66,7 +82,10 @@ object DeltaWrite {
  *     writers are aborted, or the job failed with an unknown reason, call
  *     abort(WriterCommitMessage[]).
  */
-private class DeltaBatchWrite(kernelTable: KernelTable, logicalWriteInfo: LogicalWriteInfo)
+private class DeltaBatchWrite(
+    kernelTable: KernelTable,
+    logicalWriteInfo: LogicalWriteInfo,
+    readScan: Option[DeltaScan])
     extends BatchWrite {
   import DeltaBatchWrite._
 
@@ -107,6 +126,54 @@ private class DeltaBatchWrite(kernelTable: KernelTable, logicalWriteInfo: Logica
     }
     committed = true
 
+    var removeFileRows = Array.empty[KernelRow]
+
+    // TODO: somehow communicate that an overwrite is happening
+    if (readScan.isDefined) {
+      removeFileRows = readScan.get.planInputPartitions().map { partition =>
+        val scanFileRow = JsonUtils.rowFromJson(
+          partition.asInstanceOf[DeltaInputPartition].serializedScanFileRow,
+          InternalScanFileUtils.SCAN_FILE_SCHEMA)
+
+        val addRow = InternalScanFileUtils.getAddFileEntry(scanFileRow)
+
+        val now = System.currentTimeMillis()
+
+        val removeFileOrdinalMap = new util.HashMap[java.lang.Integer, java.lang.Object]() {
+          {
+            put(
+              REMOVE_FILE_SCHEMA.indexOf("path"),
+              addRow.getString(ADD_FILE_SCHEMA.indexOf("path")))
+
+            put(REMOVE_FILE_SCHEMA.indexOf("deletionTimestamp"), java.lang.Long.valueOf(now))
+
+            put(REMOVE_FILE_SCHEMA.indexOf("dataChange"), java.lang.Boolean.TRUE)
+
+            put(
+              REMOVE_FILE_SCHEMA.indexOf("extendedFileMetadata"),
+              java.lang.Boolean.TRUE)
+
+            put(
+              REMOVE_FILE_SCHEMA.indexOf("partitionValues"),
+              addRow.getMap(ADD_FILE_SCHEMA.indexOf("partitionValues")))
+
+            put(
+              REMOVE_FILE_SCHEMA.indexOf("size"),
+              java.lang.Long.valueOf(addRow.getLong(ADD_FILE_SCHEMA.indexOf("size"))))
+          }
+        }
+
+        val removeRow = new GenericRow(REMOVE_FILE_SCHEMA, removeFileOrdinalMap)
+
+        logger.info(
+          s"Scott > DeltaWrite > commit :: " +
+            s"\n\taddRow ${JsonUtils.rowToJson(addRow)}" +
+            s"\n\tremoveRow ${JsonUtils.rowToJson(removeRow)}")
+
+        SingleAction.createRemoveFileSingleAction(removeRow)
+      }
+    }
+
     val writtenDataActionsArray = messages
       .map { msg =>
         if (!msg.isInstanceOf[DeltaWriterCommitMessage]) {
@@ -117,7 +184,7 @@ private class DeltaBatchWrite(kernelTable: KernelTable, logicalWriteInfo: Logica
       .flatMap(_.serializedActions)
       .map(JsonUtils.rowFromJson(_, SingleAction.FULL_SCHEMA))
 
-    txn.commit(engine, arrayToCloseableIterable(writtenDataActionsArray))
+    txn.commit(engine, arrayToCloseableIterable(writtenDataActionsArray ++ removeFileRows))
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {

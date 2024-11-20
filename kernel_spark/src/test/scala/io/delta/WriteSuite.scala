@@ -13,6 +13,9 @@ object WriteSuite {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }
 
+/**
+ * On devbox: export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+ */
 class WriteSuite extends QueryTest with SharedSparkSession {
   import WriteSuite._
 
@@ -164,7 +167,7 @@ class WriteSuite extends QueryTest with SharedSparkSession {
   test("fff") {
     withUniqueTableId { tid =>
       spark
-        .range(10)
+        .range(15)
         .withColumn("part1", col("id") % 5)
         .withColumn("col1", col("id").cast("long"))
         .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
@@ -178,6 +181,12 @@ class WriteSuite extends QueryTest with SharedSparkSession {
       logger.info(s"Scott > Table $tid created")
 
       spark.table(tid).show(100)
+
+      logger.info("performing delete")
+
+      spark.sql(s"DELETE FROM $tid WHERE col1 < 5")
+
+      spark.table(tid).orderBy("col1").show(100)
     }
   }
 }

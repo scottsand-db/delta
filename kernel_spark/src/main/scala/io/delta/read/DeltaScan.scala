@@ -8,7 +8,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.types.StructType
 
 class DeltaScan(
-    kernelScan: KernelScan,
+    val kernelScan: KernelScan,
     tableEngine: KernelEngine,
     sparkReadSchema: SparkStructType)
     extends SparkScan

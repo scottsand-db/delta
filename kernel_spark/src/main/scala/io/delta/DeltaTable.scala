@@ -83,7 +83,7 @@ class DeltaTable(path: String)
 
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
-    logger.info(s"newRowLevelOperationBuilder: info=$info")
+    logger.info(s"Scott > newRowLevelOperationBuilder: info=$info")
     new DeltaRowLevelOperationBuilder(kernelTable, kernelEngine, info)
   }
 }
