@@ -6,6 +6,8 @@ import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap, ColumnVector => SparkColumnVector, ColumnarBatch => SparkColumnarBatch}
 import org.apache.spark.unsafe.types.UTF8String
 
+import java.util.Optional
+
 class KernelColumnarBatchToSparkColumnarBatchWrapper(
     columns: Array[SparkColumnVector],
     numRows: Int)
@@ -18,27 +20,61 @@ object KernelColumnarBatchToSparkColumnarBatchWrapper {
       : KernelColumnarBatchToSparkColumnarBatchWrapper = {
     val kernelColumnarBatch = kernelFilteredColumnarBatch.getData
     val numColumns = kernelColumnarBatch.getSchema.length()
-    val numRows = kernelColumnarBatch.getSize
+    var numRows = kernelColumnarBatch.getSize
 
-    // TODO: create a mapping from desiredRow (i.e. getInt rowId) to actual row (which would be
-    //  greater than the desiredRow) due to selection vector
+    val desiredToActualRowIdMapping: Option[Array[Int]] =
+      if (kernelFilteredColumnarBatch.getSelectionVector.isPresent) {
+        val selectionVector = kernelFilteredColumnarBatch.getSelectionVector.get
+        val rowIdMapping = scala.collection.mutable.ArrayBuffer.empty[Int]
+        for (actualRowId <- 0 until selectionVector.getSize) {
+          if (!selectionVector.isNullAt(actualRowId) && selectionVector.getBoolean(actualRowId)) {
+            rowIdMapping += actualRowId
 
-    logger.info(s"kernelColumnarBatch: numRows $numRows, numColumns: $numColumns, " +
-      s"getSchema ${kernelColumnarBatch.getSchema}")
+            logger.info(s"rowIdMapping index ${rowIdMapping.size - 1} -> $actualRowId")
+          } else {
+            logger.info(s"skipping actual selection vector row $actualRowId")
+          }
+        }
+        logger.info(s"rowIdMapping size: ${rowIdMapping.size}")
+        logger.info(s"number of skipped rows: ${selectionVector.getSize - rowIdMapping.size}")
+        numRows = rowIdMapping.size
+        Some(rowIdMapping.toArray)
+      } else None
+
+    logger.info(
+      s"kernelColumnarBatch: numRows $numRows, numColumns: $numColumns, " +
+        s"getSchema ${kernelColumnarBatch.getSchema}")
 
     val columns: Array[SparkColumnVector] = (0 until numColumns).map { i =>
-      logger.info(s"Creating SparkColumnVector for column $i: " +
-        s"${kernelColumnarBatch.getColumnVector(i).getDataType}")
-      new KernelColumnVectorToSparkColumnVectorWrapper(kernelColumnarBatch.getColumnVector(i))
+      logger.info(
+        s"Creating SparkColumnVector for column $i: " +
+          s"${kernelColumnarBatch.getColumnVector(i).getDataType}")
+      new KernelColumnVectorToSparkColumnVectorWrapper(
+        kernelColumnarBatch.getColumnVector(i),
+        desiredToActualRowIdMapping)
     }.toArray
 
-    new KernelColumnarBatchToSparkColumnarBatchWrapper(columns, kernelColumnarBatch.getSize)
+    new KernelColumnarBatchToSparkColumnarBatchWrapper(columns, numRows)
   }
 }
 
-class KernelColumnVectorToSparkColumnVectorWrapper(kernelColumnVector: KernelColumnVector)
+class KernelColumnVectorToSparkColumnVectorWrapper(
+    kernelColumnVector: KernelColumnVector,
+    desiredToActualRowIdMapping: Option[Array[Int]])
     extends SparkColumnVector(
       SchemaUtils.convertKernelDataTypeToSparkDataType(kernelColumnVector.getDataType)) {
+
+  import KernelColumnVectorToSparkColumnVectorWrapper._
+
+  private def getActualRowId(desiredRowId: Int): Int = {
+    if (desiredToActualRowIdMapping.isDefined) {
+      val actualRowId = desiredToActualRowIdMapping.get(desiredRowId)
+      logger.info(s"desiredRowId: $desiredRowId --> actualRowId $actualRowId")
+      actualRowId
+    } else {
+      desiredRowId
+    }
+  }
 
   override def close(): Unit = kernelColumnVector.close()
 
@@ -46,26 +82,28 @@ class KernelColumnVectorToSparkColumnVectorWrapper(kernelColumnVector: KernelCol
 
   override def numNulls(): Int = 0
 
-  override def isNullAt(rowId: Int): Boolean = kernelColumnVector.isNullAt(rowId)
+  override def isNullAt(rowId: Int): Boolean = kernelColumnVector.isNullAt(getActualRowId(rowId))
 
-  override def getBoolean(rowId: Int): Boolean = kernelColumnVector.getBoolean(rowId)
+  override def getBoolean(rowId: Int): Boolean =
+    kernelColumnVector.getBoolean(getActualRowId(rowId))
 
-  override def getByte(rowId: Int): Byte = kernelColumnVector.getByte(rowId)
+  override def getByte(rowId: Int): Byte = kernelColumnVector.getByte(getActualRowId(rowId))
 
-  override def getShort(rowId: Int): Short = kernelColumnVector.getShort(rowId)
+  override def getShort(rowId: Int): Short = kernelColumnVector.getShort(getActualRowId(rowId))
 
-  override def getInt(rowId: Int): Int = kernelColumnVector.getInt(rowId)
+  override def getInt(rowId: Int): Int = kernelColumnVector.getInt(getActualRowId(rowId))
 
-  override def getLong(rowId: Int): Long = kernelColumnVector.getLong(rowId)
+  override def getLong(rowId: Int): Long = kernelColumnVector.getLong(getActualRowId(rowId))
 
-  override def getFloat(rowId: Int): Float = kernelColumnVector.getFloat(rowId)
+  override def getFloat(rowId: Int): Float = kernelColumnVector.getFloat(getActualRowId(rowId))
 
-  override def getDouble(rowId: Int): Double = kernelColumnVector.getDouble(rowId)
+  override def getDouble(rowId: Int): Double = kernelColumnVector.getDouble(getActualRowId(rowId))
 
   override def getUTF8String(rowId: Int): UTF8String =
-    UTF8String.fromString(kernelColumnVector.getString(rowId))
+    UTF8String.fromString(kernelColumnVector.getString(getActualRowId(rowId)))
 
-  override def getBinary(rowId: Int): Array[Byte] = kernelColumnVector.getBinary(rowId)
+  override def getBinary(rowId: Int): Array[Byte] =
+    kernelColumnVector.getBinary(getActualRowId(rowId))
 
   override def getArray(rowId: Int): ColumnarArray = throw new UnsupportedOperationException(
     "getArray is not supported")
@@ -78,4 +116,8 @@ class KernelColumnVectorToSparkColumnVectorWrapper(kernelColumnVector: KernelCol
 
   override def getChild(ordinal: Int): SparkColumnVector =
     throw new UnsupportedOperationException("getChild is not supported")
+}
+
+object KernelColumnVectorToSparkColumnVectorWrapper {
+  private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }

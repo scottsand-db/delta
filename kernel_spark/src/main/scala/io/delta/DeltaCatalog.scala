@@ -1,6 +1,7 @@
 package io.delta
 
 import io.delta.kernel.Operation
+import io.delta.kernel.exceptions.TableNotFoundException
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog._
@@ -20,7 +21,7 @@ class DeltaCatalog extends TableCatalog {
   private lazy val engine =
     io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
 
-  private def tableIdentifierToPath(ident: Identifier): String = {
+  def tableIdentifierToPath(ident: Identifier): String = {
     s"/tmp/spark_warehouse/${ident.name()}"
   }
 
@@ -33,13 +34,23 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def loadTable(ident: Identifier): Table = {
-    if (!inMemoryTables.contains(ident.name())) {
-      logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table does not exist")
-      throw new NoSuchTableException(ident)
+    if (inMemoryTables.contains(ident.name())) {
+      logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table exists")
+      return inMemoryTables(ident.name())
+    }
+    val path = tableIdentifierToPath(ident)
+
+    try {
+      io.delta.kernel.Table.forPath(engine, path)
+    } catch {
+      case _: TableNotFoundException =>
+        logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table does not exist")
+        throw new NoSuchTableException(ident)
     }
 
-    logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table exists")
-    inMemoryTables(ident.name())
+    val table = new DeltaTable(path)
+    inMemoryTables.put(ident.name(), table)
+    table
   }
 
   override def createTable(
