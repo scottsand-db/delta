@@ -4,7 +4,7 @@ import io.delta.kernel.exceptions.TableNotFoundException
 import io.delta.kernel.internal.SnapshotImpl
 import io.delta.kernel.internal.util.VectorUtils
 import io.delta.read.DeltaScanBuilder
-import io.delta.write.DeltaWriteBuilder
+import io.delta.write.SparkWriteBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
@@ -50,7 +50,7 @@ class DeltaTable(path: String)
 
   override def newWriteBuilder(writeInfo: LogicalWriteInfo): WriteBuilder = {
     logger.info(s"newWriteBuilder: writeInfo=$writeInfo")
-    new DeltaWriteBuilder(kernelTable, writeInfo)
+    new SparkWriteBuilder(kernelTable, writeInfo)
   }
 
   override def partitioning(): Array[Transform] = {

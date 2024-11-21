@@ -95,29 +95,34 @@ class DMLSuite extends QueryTest with SharedSparkSession {
       val readDataDSv2 = spark.read.format("delta2").table(tableId)
       readDataDSv2.show()
       assert(readDataDSv2.count() == 12)
+    }
+  }
 
-      /*
-      // WRONG --- when using DeltaReaderFactory::supportColumnarReads = true
-      // CORRECT - when using DeltaReaderFactory::supportColumnarReads = false
-      +---+----------+
-      | id|     value|
-      +---+----------+
-      |  8| updated_8|
-      |  9| updated_9|
-      | 10|updated_10|
-      | 11|updated_11|
-      |  5|test_value|
-      |  6|test_value|
-      |  7|test_value|
-      |  8|test_value| <-- WRONG
-      |  9|test_value| <-- WRONG
-      |  0|test_value|
-      |  1|test_value|
-      |  2|test_value|
-      |  3|test_value|
-      |  4|test_value|
-      +---+----------+
-       */
+  test("bbb") {
+    withUniqueTableIdAndItsPath { (tid, path) =>
+      spark
+        .range(10)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id").cast("long"))
+        .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
+        .withColumn("col3", col("id") % 2 === 0)
+        .drop("id")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .partitionBy("part1")
+        .option("delta.enableDeletionVectors", "true")
+        .save(path)
+
+      logger.info(s"Scott > Table $tid created")
+
+      spark.table(tid).show(100)
+
+      logger.info("Scott > performing delete")
+
+      spark.sql(s"DELETE FROM $tid WHERE col1 < 3")
+
+      spark.table(tid).show(100)
     }
   }
 }

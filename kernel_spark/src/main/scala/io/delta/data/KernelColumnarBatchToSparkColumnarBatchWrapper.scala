@@ -6,8 +6,6 @@ import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap, ColumnVector => SparkColumnVector, ColumnarBatch => SparkColumnarBatch}
 import org.apache.spark.unsafe.types.UTF8String
 
-import java.util.Optional
-
 class KernelColumnarBatchToSparkColumnarBatchWrapper(
     columns: Array[SparkColumnVector],
     numRows: Int)
