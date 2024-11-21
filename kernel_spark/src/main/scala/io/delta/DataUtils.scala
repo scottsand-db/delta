@@ -1,6 +1,7 @@
 package io.delta
 
-import io.delta.kernel.expressions.{Literal => KernelLiteral }
+import io.delta.kernel.expressions.{Literal => KernelLiteral}
+import io.delta.kernel.internal.util.ColumnMapping
 import io.delta.kernel.types.{BooleanType => KernelBooleanType, DataType => KernelDataType, IntegerType => KernelIntegerType, LongType => KernelLongType, StringType => KernelStringType, StructType => KernelStructType}
 import org.apache.spark.sql.catalyst.{InternalRow => SparkInternalRow}
 
@@ -11,9 +12,10 @@ object DataUtils {
       schema: KernelStructType,
       partitionColNames: Seq[String]): Map[String, KernelLiteral] = {
     partitionColNames.zipWithIndex.map { case (partColName, idx) =>
-      val partColDataType = schema.at(idx).getDataType
-      val kernelLiteral = sparkRowElementToKernelLiteral(row, partColDataType, idx)
-      partColName -> kernelLiteral
+      val partColField = schema.at(idx)
+      val physicalName = ColumnMapping.getPhysicalName(partColField)
+      val kernelLiteral = sparkRowElementToKernelLiteral(row, partColField.getDataType, idx)
+      physicalName -> kernelLiteral
     }.toMap
   }
 

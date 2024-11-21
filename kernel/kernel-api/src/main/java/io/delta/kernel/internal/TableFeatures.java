@@ -17,6 +17,7 @@
 package io.delta.kernel.internal;
 
 import static io.delta.kernel.internal.DeltaErrors.*;
+import static io.delta.kernel.internal.TableConfig.COLUMN_MAPPING_MODE;
 import static io.delta.kernel.internal.TableConfig.IN_COMMIT_TIMESTAMPS_ENABLED;
 
 import io.delta.kernel.internal.actions.Metadata;
@@ -230,6 +231,8 @@ public class TableFeatures {
     switch (feature) {
       case "inCommitTimestamp":
         return IN_COMMIT_TIMESTAMPS_ENABLED.fromMetadata(metadata);
+      case "columnMapping":
+        return COLUMN_MAPPING_MODE.fromMetadata(metadata) != ColumnMapping.ColumnMappingMode.NONE;
       default:
         return false;
     }

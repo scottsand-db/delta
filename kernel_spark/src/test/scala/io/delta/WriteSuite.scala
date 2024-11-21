@@ -223,4 +223,23 @@ class WriteSuite extends QueryTest with SharedSparkSession {
       spark.table(tid).orderBy("col1").show(100)
     }
   }
+
+  test("ggg") {
+    withUniqueTableId { tid =>
+      spark
+        .range(15)
+        .withColumn("part1", col("id") % 5)
+        .withColumn("col1", col("id").cast("long"))
+        .withColumn("col2", concat(lit("value_"), col("id").cast("string")))
+        .withColumn("col3", col("id") % 2 === 0)
+        .drop("id")
+        .writeTo(tid)
+        .using("delta2")
+        .partitionedBy(col("part1"))
+        .tableProperty("delta.columnMapping.mode", "name")
+        .tableProperty("delta.minReaderVersion", "2")
+        .tableProperty("delta.minWriterVersion", "7")
+        .create()
+    }
+  }
 }

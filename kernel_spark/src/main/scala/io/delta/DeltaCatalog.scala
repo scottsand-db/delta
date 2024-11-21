@@ -10,6 +10,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import java.util
 import java.util.UUID
+import java.util.stream.Collectors
 import scala.collection.JavaConverters._
 
 class DeltaCatalog extends TableCatalog {
@@ -64,6 +65,12 @@ class DeltaCatalog extends TableCatalog {
       .createTransactionBuilder(engine, "kernel-spark-dsv2", Operation.CREATE_TABLE)
       .withSchema(engine, SchemaUtils.convertSparkSchemaToKernelSchema(schema))
       .withPartitionColumns(engine, partitionCols.toList.asJava)
+      .withTableProperties(
+        engine,
+        properties.asScala
+          .filter(entry => entry._1.startsWith("delta."))
+          .toMap
+          .asJava)
       .build(engine)
       .commit(engine, io.delta.kernel.utils.CloseableIterable.emptyIterable())
 

@@ -111,6 +111,14 @@ public class Protocol {
     return new GenericRow(Protocol.FULL_SCHEMA, protocolMap);
   }
 
+  public Protocol withNewMinReaderVersion(int newMinReaderVersion) {
+    return new Protocol(newMinReaderVersion, minWriterVersion, readerFeatures, writerFeatures);
+  }
+
+  public Protocol withNewMinWriterVersion(int newMinWriterVersion) {
+    return new Protocol(minReaderVersion, newMinWriterVersion, readerFeatures, writerFeatures);
+  }
+
   public Protocol withNewWriterFeatures(Set<String> writerFeatures) {
     Tuple2<Integer, Integer> newProtocolVersions =
         TableFeatures.minProtocolVersionFromAutomaticallyEnabledFeatures(writerFeatures);

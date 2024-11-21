@@ -44,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class TransactionBuilderImpl implements TransactionBuilder {
+
   private static final Logger logger = LoggerFactory.getLogger(TransactionBuilderImpl.class);
 
   private final long currentTimeMillis = System.currentTimeMillis();
@@ -128,6 +129,17 @@ public class TransactionBuilderImpl implements TransactionBuilder {
       if (!newProperties.isEmpty()) {
         shouldUpdateMetadata = true;
         metadata = metadata.withNewConfiguration(newProperties);
+
+        if (newProperties.containsKey(TableConfig.MIN_READER_VERSION.getKey())) {
+          protocol =
+              protocol.withNewMinReaderVersion(
+                  Integer.parseInt(newProperties.get(TableConfig.MIN_READER_VERSION.getKey())));
+        }
+        if (newProperties.containsKey(TableConfig.MIN_WRITER_VERSION.getKey())) {
+          protocol =
+              protocol.withNewMinWriterVersion(
+                  Integer.parseInt(newProperties.get(TableConfig.MIN_WRITER_VERSION.getKey())));
+        }
       }
 
       Set<String> newWriterFeatures =
@@ -204,6 +216,7 @@ public class TransactionBuilderImpl implements TransactionBuilder {
   }
 
   private class InitialSnapshot extends SnapshotImpl {
+
     InitialSnapshot(Path dataPath, LogReplay logReplay, Metadata metadata, Protocol protocol) {
       super(dataPath, LogSegment.empty(table.getLogPath()), logReplay, protocol, metadata);
     }

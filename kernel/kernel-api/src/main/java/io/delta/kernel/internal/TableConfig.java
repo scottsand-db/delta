@@ -34,6 +34,14 @@ public class TableConfig<T> {
   // TableConfigs //
   //////////////////
 
+  public static final TableConfig<Integer> MIN_READER_VERSION =
+      new TableConfig<>(
+          "delta.minReaderVersion", "1", Integer::valueOf, value -> value >= 0, "todo", true);
+
+  public static final TableConfig<Integer> MIN_WRITER_VERSION =
+      new TableConfig<>(
+          "delta.minWriterVersion", "2", Integer::valueOf, value -> value >= 0, "todo", true);
+
   /**
    * The shortest duration we have to keep logically deleted data files around before deleting them
    * physically.
@@ -221,6 +229,8 @@ public class TableConfig<T> {
       Collections.unmodifiableMap(
           new HashMap<String, TableConfig<?>>() {
             {
+              addConfig(this, MIN_READER_VERSION);
+              addConfig(this, MIN_WRITER_VERSION);
               addConfig(this, TOMBSTONE_RETENTION);
               addConfig(this, CHECKPOINT_INTERVAL);
               addConfig(this, IN_COMMIT_TIMESTAMPS_ENABLED);

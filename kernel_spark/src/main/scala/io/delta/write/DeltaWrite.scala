@@ -149,9 +149,7 @@ private class DeltaBatchWrite(
 
             put(REMOVE_FILE_SCHEMA.indexOf("dataChange"), java.lang.Boolean.TRUE)
 
-            put(
-              REMOVE_FILE_SCHEMA.indexOf("extendedFileMetadata"),
-              java.lang.Boolean.TRUE)
+            put(REMOVE_FILE_SCHEMA.indexOf("extendedFileMetadata"), java.lang.Boolean.TRUE)
 
             put(
               REMOVE_FILE_SCHEMA.indexOf("partitionValues"),
@@ -262,7 +260,7 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
   logger.info(
     s"DeltaBatchDataWriter created: partitionId=$partitionId, taskId=$taskId," +
       s"writerId=$writerId, schema=$targetTableSchemaButNotTheWriteSchema, " +
-      s"partitionColNames=$partitionColNames")
+      s"partitionColNames=$partitionColNames,txnStateRowSerialized=$txnStateRowSerialized")
 
   /////////////////
   // Public APIs //
@@ -318,6 +316,9 @@ private class DeltaBatchDataWriter(txnStateRowSerialized: String, partitionId: I
 
     val txnWriteContext =
       KernelTransaction.getWriteContext(engine, txnStateRow, partitionValues)
+
+    logger.info(
+      s"commitSinglePartition[$writerId] > targetDirectory=${txnWriteContext.getTargetDirectory()}")
 
     val dataFiles = engine
       .getParquetHandler()
