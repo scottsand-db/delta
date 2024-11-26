@@ -122,7 +122,7 @@ class DeltaScanBuilder(kernelTable: KernelTable, tableEngine: KernelEngine)
    * called, empty array should be returned for this case.
    */
   override def pushedPredicates(): Array[Predicate] = {
-    logger.info(s"pushedPredicates(): $pushedSparkPredicates")
+    logger.info(s"pushedPredicates(): ${pushedSparkPredicates.mkString("Array(", ", ", ")")}")
     pushedSparkPredicates
   }
 

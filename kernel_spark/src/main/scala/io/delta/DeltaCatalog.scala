@@ -1,31 +1,30 @@
 package io.delta
 
+import io.delta.engine.KernelSparkEngine
 import io.delta.kernel.Operation
 import io.delta.kernel.exceptions.TableNotFoundException
-import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import java.util
-import java.util.UUID
-import java.util.stream.Collectors
 import scala.collection.JavaConverters._
 
 class DeltaCatalog extends TableCatalog {
   import DeltaCatalog._
 
   private var catalogName: String = _
-  private lazy val engine =
-    io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+  private lazy val engine = KernelSparkEngine.createOnDriver()
 
   def tableIdentifierToPath(ident: Identifier): String = {
     s"/tmp/spark_warehouse/${ident.name()}"
   }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    logger.info(s"Scott > DeltaCatalog > initialize :: name=$name, options=$options")
     this.catalogName = name
   }
 
@@ -34,6 +33,8 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def loadTable(ident: Identifier): Table = {
+    logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident")
+
     if (inMemoryTables.contains(ident.name())) {
       logger.info(s"Scott > DeltaCatalog > loadTable :: ident=$ident, table exists")
       return inMemoryTables(ident.name())
@@ -110,6 +111,7 @@ class DeltaCatalog extends TableCatalog {
   }
 
   override def tableExists(ident: Identifier): Boolean = {
+    logger.info(s"Scott > DeltaCatalog > tableExists :: ident=$ident")
     inMemoryTables.contains(ident.name())
   }
 

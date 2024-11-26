@@ -31,7 +31,7 @@ class DeltaRowLevelOperationBuilder(
     info: RowLevelOperationInfo)
     extends RowLevelOperationBuilder {
 
-  val mode: RowLevelOperationMode = MergeOnRead
+  val mode: RowLevelOperationMode = CopyOnWrite
 
   override def build(): RowLevelOperation = mode match {
     case CopyOnWrite => new CopyOnWriteRowLevelOperation(kernelTable, kernelEngine, info)

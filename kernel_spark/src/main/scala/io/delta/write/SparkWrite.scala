@@ -13,8 +13,11 @@ import io.delta.kernel.types.{BooleanType, IntegerType, LongType, StringType}
 import io.delta.kernel.utils.{CloseableIterable, CloseableIterator}
 import io.delta.kernel.{Operation, Table => KernelTable, Transaction => KernelTransaction}
 import io.delta.read.{DeltaInputPartition, DeltaScan}
-import io.delta.{AbstractVectorWrapper, DataUtils}
+import io.delta.DataUtils
+import io.delta.data.AbstractSparkRowArrayToKernelColumnVectorWrapper
+import io.delta.engine.KernelSparkEngine
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write._
 
@@ -95,8 +98,7 @@ private class SparkBatchWrite(
 
   private var committed = false;
 
-  private val engine =
-    io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+  private val engine = KernelSparkEngine.createOnDriver()
 
   private val txn = kernelTable
     .createTransactionBuilder(engine, "kernel-spark-dsv2", Operation.WRITE)
@@ -356,7 +358,6 @@ private class SparkBatchDataWriter(txnStateRowSerialized: String, partitionId: I
   private def sparkRecordBufferToKernelColumnarBatchIter(
       partitionArrayData: Array[InternalRow]): CloseableIterator[FilteredColumnarBatch] = {
     logger.info(s"arrayData: ${partitionArrayData.map(_.toString).mkString(", ")}")
-    logger.info(s"arrayData: ${partitionArrayData.map(_.toString).mkString(", ")}")
     val numColumns = targetTableSchemaButNotTheWriteSchema.length()
     val size = partitionArrayData.length
 
@@ -368,7 +369,7 @@ private class SparkBatchDataWriter(txnStateRowSerialized: String, partitionId: I
     for (i <- 0 until numColumns) {
       columnVectors(i) = targetTableSchemaButNotTheWriteSchema.at(i).getDataType match {
         case x: IntegerType =>
-          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
+          new AbstractSparkRowArrayToKernelColumnVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created IntegerType Vector Wrapper: coldIdx = $colIdx")
 
             override def getInt(rowId: Int): Int = {
@@ -379,7 +380,7 @@ private class SparkBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: StringType =>
-          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
+          new AbstractSparkRowArrayToKernelColumnVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created StringType Vector Wrapper: coldIdx = $colIdx")
 
             override def getString(rowId: Int): String = {
@@ -390,7 +391,7 @@ private class SparkBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: BooleanType =>
-          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
+          new AbstractSparkRowArrayToKernelColumnVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created BooleanType Vector Wrapper: coldIdx = $colIdx")
 
             override def getBoolean(rowId: Int): Boolean = {
@@ -401,7 +402,7 @@ private class SparkBatchDataWriter(txnStateRowSerialized: String, partitionId: I
           }
 
         case x: LongType =>
-          new AbstractVectorWrapper(x, partitionArrayData, colIdx = i) {
+          new AbstractSparkRowArrayToKernelColumnVectorWrapper(x, partitionArrayData, colIdx = i) {
             logger.info(s"Created LongType Vector Wrapper: coldIdx = $colIdx")
 
             override def getLong(rowId: Int): Long = {

@@ -1,10 +1,10 @@
-package io.delta
+package io.delta.data
 
 import io.delta.kernel.data.{ColumnVector => KernelColumnVector}
 import io.delta.kernel.types.DataType
 import org.apache.spark.sql.catalyst.{InternalRow => SparkInternalRow}
 
-class AbstractVectorWrapper(
+class AbstractSparkRowArrayToKernelColumnVectorWrapper(
     val dataType: DataType,
     protected val bufferReference: Array[SparkInternalRow],
     protected val colIdx: Int

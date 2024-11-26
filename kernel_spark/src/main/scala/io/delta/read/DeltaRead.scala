@@ -1,6 +1,7 @@
 package io.delta.read
 
 import io.delta.data.{KernelColumnarBatchToSparkColumnarBatchWrapper, KernelRowToSparkRowWrapper}
+import io.delta.engine.KernelSparkEngine
 import io.delta.kernel.{Scan => KernelScan}
 import io.delta.kernel.defaults.internal.json.JsonUtils
 import io.delta.kernel.internal.InternalScanFileUtils
@@ -8,6 +9,7 @@ import io.delta.kernel.internal.data.ScanStateRow
 import io.delta.kernel.internal.util.Utils
 import io.delta.kernel.utils.CloseableIterator
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -34,7 +36,8 @@ class DeltaReaderFactory extends PartitionReaderFactory {
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     logger.info("supportColumnarReads")
-    true
+    SparkSession.active.sparkContext.getConf
+      .getBoolean("io.delta.kernel.spark.supportColumnarReads", defaultValue = true)
   }
 }
 
@@ -45,9 +48,10 @@ object DeltaReaderFactory {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+/** Created on Executor */
 abstract class DeltaPartitionReader[T](deltaInputPartition: DeltaInputPartition)
     extends PartitionReader[T] {
-  protected val engine = io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+  protected val engine = KernelSparkEngine.createOnExecutor()
 
   protected val scanFileRow = JsonUtils.rowFromJson(
     deltaInputPartition.serializedScanFileRow,
@@ -62,7 +66,7 @@ abstract class DeltaPartitionReader[T](deltaInputPartition: DeltaInputPartition)
     .readParquetFiles(
       Utils.singletonCloseableIterator(addFileStatus),
       ScanStateRow.getPhysicalDataReadSchema(engine, scanStateRow),
-      java.util.Optional.empty() /* predicate */)
+      java.util.Optional.empty() /* predicate */ )
 
   protected val logicalRowDataColumnarBatchIter =
     KernelScan.transformPhysicalData(engine, scanStateRow, scanFileRow, physicalRowDataIter)
@@ -71,6 +75,9 @@ abstract class DeltaPartitionReader[T](deltaInputPartition: DeltaInputPartition)
 /** Created on the executor. */
 class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
     extends DeltaPartitionReader[InternalRow](deltaInputPartition) {
+  import DeltaPartitionReaderOfRows._
+
+  logger.info("DeltaPartitionReaderOfRows constructed")
 
   private var rowIter: CloseableIterator[io.delta.kernel.data.Row] = null
   private var curr: io.delta.kernel.data.Row = null
@@ -111,11 +118,18 @@ class DeltaPartitionReaderOfRows(deltaInputPartition: DeltaInputPartition)
   }
 }
 
+object DeltaPartitionReaderOfRows {
+  private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 class DeltaPartitionReaderOfColumnarBatch(deltaInputPartition: DeltaInputPartition)
-  extends DeltaPartitionReader[ColumnarBatch](deltaInputPartition) {
+    extends DeltaPartitionReader[ColumnarBatch](deltaInputPartition) {
+  import DeltaPartitionReaderOfColumnarBatch._
+
+  logger.info("DeltaPartitionReaderOfColumnarBatch constructed")
 
   private var currentBatch: KernelColumnarBatchToSparkColumnarBatchWrapper = null
   private var closed = false
@@ -150,4 +164,8 @@ class DeltaPartitionReaderOfColumnarBatch(deltaInputPartition: DeltaInputPartiti
       closed = true
     }
   }
+}
+
+object DeltaPartitionReaderOfColumnarBatch {
+  private val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 }

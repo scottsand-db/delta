@@ -1,11 +1,13 @@
 package io.delta
 
+import io.delta.engine.KernelSparkEngine
 import io.delta.kernel.exceptions.TableNotFoundException
 import io.delta.kernel.internal.SnapshotImpl
 import io.delta.kernel.internal.util.VectorUtils
 import io.delta.read.DeltaScanBuilder
 import io.delta.write.SparkWriteBuilder
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -15,6 +17,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import scala.collection.JavaConverters._
 
+// scalastyle:off deltahadoopconfiguration
 class DeltaTable(path: String)
     extends Table
     with SupportsWrite
@@ -22,8 +25,7 @@ class DeltaTable(path: String)
     with SupportsRowLevelOperations {
   import io.delta.DeltaTable._
 
-  private lazy val kernelEngine =
-    io.delta.kernel.defaults.engine.DefaultEngine.create(new Configuration())
+  private lazy val kernelEngine = KernelSparkEngine.createOnDriver()
 
   private lazy val kernelTable =
     io.delta.kernel.Table.forPath(kernelEngine, path)
