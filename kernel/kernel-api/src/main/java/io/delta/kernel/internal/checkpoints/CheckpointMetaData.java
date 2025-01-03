@@ -35,14 +35,26 @@ public class CheckpointMetaData {
           .add("size", LongType.LONG, false /* nullable */)
           .add("parts", LongType.LONG);
 
-  public final long version;
-  public final long size;
-  public final Optional<Long> parts;
+  private final long version;
+  private final long size;
+  private final Optional<Long> parts;
 
   public CheckpointMetaData(long version, long size, Optional<Long> parts) {
     this.version = version;
     this.size = size;
     this.parts = parts;
+  }
+
+  public long getVersion() {
+    return version;
+  }
+
+  public long getSize() {
+    return size;
+  }
+
+  public Optional<Long> getParts() {
+    return parts;
   }
 
   public Row toRow() {

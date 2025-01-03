@@ -29,9 +29,19 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
-/** Contains methods to create user-facing Delta exceptions. */
+/**
+ * Contains methods to create user-facing Delta exceptions.
+ */
 public final class DeltaErrors {
-  private DeltaErrors() {}
+
+  private DeltaErrors() {
+  }
+
+  public static KernelException inconsistentDeltaLog(String tablePath) {
+    return new KernelException(String.format(
+        "Kernel has detected an inconsistent Delta log for table %s. Please retry your operation.",
+        tablePath));
+  }
 
   public static KernelException versionBeforeFirstAvailableCommit(
       String tablePath, long versionToLoad, long earliestVersion) {
@@ -314,6 +324,7 @@ public final class DeltaErrors {
 
   // Functional interface for a fx that throws an `IOException` (but no other checked exceptions)
   public interface SupplierWithIOException<T> {
+
     T get() throws IOException;
   }
 

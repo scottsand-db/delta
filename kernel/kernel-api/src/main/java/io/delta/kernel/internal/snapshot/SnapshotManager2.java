@@ -186,13 +186,21 @@ public class SnapshotManager2 {
 
     // TODO: logger.debug $deltasAfterCheckpoint
 
-    ///////////////////////////////////////////////////////////////////
-    // Step 7: Determine the version of the snapshot we can now load //
-    ///////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////
+    // Step 7: Determine the version of the snapshot we can now load. //
+    ////////////////////////////////////////////////////////////////////
 
     final long newVersion = deltaVersionsAfterCheckpoint.isEmpty()
         ? latestCompleteCheckpointVersion
         : deltaVersionsAfterCheckpoint.get(deltaVersionsAfterCheckpoint.size() - 1);
+
+    /////////////////////////////////////////////
+    // Step 8: Perform some basic validations. //
+    /////////////////////////////////////////////
+
+    if (versionToLoad.isPresent() && newVersion < versionToLoad.get()) {
+      throw DeltaErrors.versionAfterLatestCommit(dataPath.toString(), versionToLoad.get(), newVersion);
+    }
 
   }
 }

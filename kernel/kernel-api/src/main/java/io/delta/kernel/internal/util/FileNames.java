@@ -168,4 +168,9 @@ public final class FileNames {
           String.format("Unexpected file type found in transaction log: %s", path));
     }
   }
+
+  /** Returns true if the given file name is a delta log file. */
+  public static boolean isDeltaCommitOrCheckpointFile(String fileName) {
+    return isCheckpointFile(fileName) || isCommitFile(fileName);
+  }
 }
