@@ -18,6 +18,7 @@ package io.delta.kernel.internal;
 import static java.lang.String.format;
 
 import io.delta.kernel.exceptions.*;
+import io.delta.kernel.internal.DeltaLogActionUtils.VerifyVersionsContext;
 import io.delta.kernel.internal.actions.DomainMetadata;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructType;
@@ -101,28 +102,52 @@ public final class DeltaErrors {
   }
 
   public static KernelException startVersionNotFound(
-      String tablePath, long startVersionRequested, Optional<Long> earliestAvailableVersion) {
-    String message =
-        String.format(
-            "%s: Requested table changes beginning with startVersion=%s but no log file found for "
-                + "version %s.",
-            tablePath, startVersionRequested, startVersionRequested);
-    if (earliestAvailableVersion.isPresent()) {
-      message =
-          message
-              + String.format(" Earliest available version is %s", earliestAvailableVersion.get());
+      VerifyVersionsContext context,
+      String tablePath,
+      long startVersionRequested,
+      Optional<Long> earliestAvailableVersion) {
+    if (context == VerifyVersionsContext.CHANGES) {
+      String msg =
+          String.format(
+              "%s: Requested table changes beginning with %d but no log file found for "
+                  + "that version.",
+              tablePath, startVersionRequested);
+      if (earliestAvailableVersion.isPresent()) {
+        msg += String.format(" Earliest available version is %s.", earliestAvailableVersion.get());
+      }
+      return new KernelException(msg);
+    } else if (context == VerifyVersionsContext.SNAPSHOT) {
+      final String msg =
+          String.format(
+              "Could not find the first delta file version %s needed to compute snapshot.",
+              startVersionRequested);
+      return new InvalidTableException(tablePath, msg);
+    } else {
+      throw new IllegalArgumentException("Invalid context: " + context);
     }
-    return new KernelException(message);
   }
 
   public static KernelException endVersionNotFound(
-      String tablePath, long endVersionRequested, long latestAvailableVersion) {
-    String message =
-        String.format(
-            "%s: Requested table changes ending with endVersion=%d but no log file found for "
-                + "version %d. Latest available version is %d",
-            tablePath, endVersionRequested, endVersionRequested, latestAvailableVersion);
-    return new KernelException(message);
+      VerifyVersionsContext context,
+      String tablePath,
+      long endVersionRequested,
+      long latestAvailableVersion) {
+    if (context == VerifyVersionsContext.CHANGES) {
+      final String message =
+          String.format(
+              "%s: Requested table changes ending with %d but no log file found for that version "
+                  + "%d. Latest available version is %d",
+              tablePath, endVersionRequested, endVersionRequested, latestAvailableVersion);
+      return new KernelException(message);
+    } else if (context == VerifyVersionsContext.SNAPSHOT) {
+      final String msg =
+          String.format(
+              "Could not find the last delta file version %s needed to compute snapshot.",
+              endVersionRequested);
+      return new InvalidTableException(tablePath, msg);
+    } else {
+      throw new IllegalArgumentException("Invalid context: " + context);
+    }
   }
 
   public static KernelException invalidVersionRange(long startVersion, long endVersion) {

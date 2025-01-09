@@ -112,7 +112,12 @@ public class DeltaLogActionUtils {
 
     // Verify commit files found
     // (check that they are continuous and start with startVersion and end with endVersion)
-    verifyDeltaVersions(commitFiles, startVersion, Optional.of(endVersion), tablePath);
+    verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
+        commitFiles,
+        startVersion,
+        Optional.of(endVersion),
+        tablePath);
 
     return commitFiles;
   }
@@ -190,6 +195,11 @@ public class DeltaLogActionUtils {
   private static final StructField COMMIT_TIMESTAMP_STRUCT_FIELD =
       new StructField(COMMIT_TIMESTAMP_COL_NAME, COMMIT_TIMESTAMP_DATA_TYPE, false /* nullable */);
 
+  public enum VerifyVersionsContext {
+    CHANGES,
+    SNAPSHOT
+  }
+
   /**
    * Given a list of delta versions, verifies that they are (1) contiguous (2) versions starts with
    * expectedStartVersion and (3) end with expectedEndVersionOpt, if provided. Throws an exception
@@ -200,6 +210,7 @@ public class DeltaLogActionUtils {
    * @param commitFiles in sorted increasing order according to the commit version
    */
   public static void verifyDeltaVersions(
+      VerifyVersionsContext context,
       List<FileStatus> commitFiles,
       long expectedStartVersion,
       Optional<Long> expectedEndVersionOpt,
@@ -220,6 +231,7 @@ public class DeltaLogActionUtils {
 
     if (commitVersions.isEmpty() || !Objects.equals(commitVersions.get(0), expectedStartVersion)) {
       throw startVersionNotFound(
+          context,
           tablePath.toString(),
           expectedStartVersion,
           commitVersions.isEmpty() ? Optional.empty() : Optional.of(commitVersions.get(0)));
@@ -229,7 +241,10 @@ public class DeltaLogActionUtils {
         expectedEndVersion -> {
           if (!Objects.equals(ListUtils.getLast(commitVersions), expectedEndVersion)) {
             throw endVersionNotFound(
-                tablePath.toString(), expectedEndVersion, ListUtils.getLast(commitVersions));
+                context,
+                tablePath.toString(),
+                expectedEndVersion,
+                ListUtils.getLast(commitVersions));
           }
         });
   }

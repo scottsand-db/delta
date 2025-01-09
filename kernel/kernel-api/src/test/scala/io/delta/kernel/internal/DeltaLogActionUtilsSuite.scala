@@ -24,7 +24,7 @@ import io.delta.kernel.exceptions.{InvalidTableException, KernelException, Table
 import io.delta.kernel.internal.util.FileNames
 import io.delta.kernel.utils.FileStatus
 import org.scalatest.funsuite.AnyFunSuite
-import io.delta.kernel.internal.DeltaLogActionUtils.{getCommitFilesForVersionRange, verifyDeltaVersions}
+import io.delta.kernel.internal.DeltaLogActionUtils.{VerifyVersionsContext, getCommitFilesForVersionRange, verifyDeltaVersions}
 import io.delta.kernel.test.MockFileSystemClientUtils
 
 import java.util.Optional
@@ -35,7 +35,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
   // verifyDeltaVersions tests
   //////////////////////////////////////////////////////////////////////////////////
 
-  def getCommitFiles(versions: Seq[Long]): java.util.List[FileStatus] = {
+  private def getCommitFiles(versions: Seq[Long]): java.util.List[FileStatus] = {
     versions
       .map(v => FileStatus.of(FileNames.deltaFile(logPath, v), 0, 0))
       .asJava
@@ -44,6 +44,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
   test("verifyDeltaVersions") {
     // Basic correct use case
     verifyDeltaVersions(
+      VerifyVersionsContext.CHANGES,
       getCommitFiles(Seq(1, 2, 3)),
       1,
       Optional.of(3),
@@ -51,6 +52,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     )
     // Only one version provided
     verifyDeltaVersions(
+      VerifyVersionsContext.CHANGES,
       getCommitFiles(Seq(1)),
       1,
       Optional.of(1),
@@ -59,6 +61,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     // Non-contiguous versions
     intercept[InvalidTableException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq(1, 3, 4)),
         1,
         Optional.of(4),
@@ -68,6 +71,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     // End-version or start-version not right
     intercept[KernelException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq(1, 2, 3)),
         0,
         Optional.of(3),
@@ -76,6 +80,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     }
     intercept[KernelException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq(1, 2, 3)),
         1,
         Optional.of(4),
@@ -85,6 +90,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     // Empty versions
     intercept[KernelException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq()),
         1,
         Optional.of(4),
@@ -94,6 +100,7 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     // Unsorted or duplicates (shouldn't be possible)
     intercept[InvalidTableException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq(1, 1, 2)),
         1,
         Optional.of(4),
@@ -102,12 +109,37 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
     }
     intercept[InvalidTableException] {
       verifyDeltaVersions(
+        VerifyVersionsContext.CHANGES,
         getCommitFiles(Seq(1, 4, 3, 2)),
         1,
         Optional.of(2),
         dataPath
       )
     }
+    // VerifyVersionsContext.SNAPSHOT
+    val exMsg1 = intercept[InvalidTableException] {
+      verifyDeltaVersions(
+        VerifyVersionsContext.SNAPSHOT,
+        getCommitFiles(Seq(1, 2, 3)),
+        0,
+        Optional.of(3),
+        dataPath
+      )
+    }.getMessage
+    assert(
+      exMsg1.contains("Could not find the first delta file version 0 needed to compute snapshot."))
+
+    val exMsg2 = intercept[InvalidTableException] {
+      verifyDeltaVersions(
+        VerifyVersionsContext.SNAPSHOT,
+        getCommitFiles(Seq(0, 1, 2, 3)),
+        0,
+        Optional.of(4),
+        dataPath
+      )
+    }.getMessage
+    assert(
+      exMsg2.contains("Could not find the last delta file version 4 needed to compute snapshot."))
   }
 
   //////////////////////////////////////////////////////////////////////////////////
@@ -172,13 +204,13 @@ class DeltaLogActionUtilsSuite extends AnyFunSuite with MockFileSystemClientUtil
   testGetCommitFilesExpectedError[KernelException](
     testName = "start version not available",
     files = deltaFileStatuses(Seq(2, 3, 4, 5)),
-    expectedErrorMessageContains = "no log file found for version 1"
+    expectedErrorMessageContains = "Requested table changes beginning with 1 but no log file found"
   )
 
   testGetCommitFilesExpectedError[KernelException](
     testName = "end version not available",
     files = deltaFileStatuses(Seq(0, 1, 2)),
-    expectedErrorMessageContains = "no log file found for version 3"
+    expectedErrorMessageContains = "Requested table changes ending with 3 but no log file found"
   )
 
   testGetCommitFilesExpectedError[KernelException](
