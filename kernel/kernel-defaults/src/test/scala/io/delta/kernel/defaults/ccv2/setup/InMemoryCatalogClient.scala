@@ -86,7 +86,7 @@ class InMemoryCatalogClient(workspace: Path = new Path("/tmp/in_memory_catalog/"
 
         properties.foreach {
           case (key, null) =>
-            logger.info(s"REMOVE KEY $key")
+            logger.info(s"REMOVE KEY $key. Key exists? ${tableData.properties.contains(key)}")
             tableData.properties -= key
           case (key, value) =>
             tableData.properties.update(key, value)

@@ -63,8 +63,8 @@ public abstract class BagOfPropertiesResolvedMetadata implements ResolvedMetadat
   // instance variables //
   ////////////////////////
 
-  private List<Tuple2<String, String>> propertiesList;
-  private Map<String, String> propertiesMap;
+  public List<Tuple2<String, String>> propertiesList;
+  public Map<String, String> propertiesMap;
 
   public BagOfPropertiesResolvedMetadata() {
     this.propertiesList = null;

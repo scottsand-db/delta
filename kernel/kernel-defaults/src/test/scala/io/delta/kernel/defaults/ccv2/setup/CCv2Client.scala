@@ -47,9 +47,6 @@ trait ResolvedCatalogMetadataCommitter extends { self: BagOfPropertiesResolvedMe
   def logger: Logger
   def tableName: String
 
-  /** The *potentially* unbackfilled commits. Some may actually be backfilled. */
-  def unbackfilledCommits: Seq[FileStatus]
-
   override def commit(
       commitAsVersion: Long,
       finalizedActions: CloseableIterator[Row],
@@ -149,15 +146,20 @@ trait ResolvedCatalogMetadataCommitter extends { self: BagOfPropertiesResolvedMe
 
   private def backfill(commitAsVersion: Long, committedFileStatus: FileStatus): Unit = {
     logger.info(s"Backfilling: START. commitAsVersion=$commitAsVersion")
-    val allCandidateUnbackfilledFiles = unbackfilledCommits ++ Seq(committedFileStatus)
+    val allCandidateUnbackfilledFilePaths = Seq(committedFileStatus.getPath) ++ propertiesMap
+      .asScala
+      .filter { case (k, _) => k.startsWith(CATALOG_TRACKED_COMMIT_FILES_PREFIX) }
+      .map { case (k, _) => k.stripPrefix(CATALOG_TRACKED_COMMIT_FILES_PREFIX) }
 
-    allCandidateUnbackfilledFiles
+    logger.info(s"allCandidateUnbackfilledFilePaths: $allCandidateUnbackfilledFilePaths")
+
+    allCandidateUnbackfilledFilePaths
       // e.g. perhaps some of the deltas we got back from the catalog were in fact backfilled
-      .filter(fs => FileNames.isUnbackfilledDeltaFile(fs.getPath))
-      .foreach { fs =>
-        val fsVersion = FileNames.uuidCommitDeltaVersion(fs.getPath)
+      .filter(path => FileNames.isUnbackfilledDeltaFile(path))
+      .foreach { path =>
+        val fsVersion = FileNames.uuidCommitDeltaVersion(path)
         val backfilledFilePath = FileNames.deltaFile(logPath, fsVersion)
-        logger.info(s"Unbackfilled fs: ${fs.getPath}")
+        logger.info(s"Unbackfilled fs: ${path}")
         logger.info(s"Unbackfilled version: $fsVersion")
         logger.info(s"Backfilled file path: $backfilledFilePath")
 
@@ -165,7 +167,7 @@ trait ResolvedCatalogMetadataCommitter extends { self: BagOfPropertiesResolvedMe
           logger.info(s"Backfilled file already exists: $backfilledFilePath")
         } else {
           logger.info(s"Backfilling: $backfilledFilePath")
-          val sourceUnbackfilledPath = new HadoopPath(fs.getPath)
+          val sourceUnbackfilledPath = new HadoopPath(path)
           val targetBackfilledPath = new HadoopPath(backfilledFilePath)
           logger.info(s"Copying $sourceUnbackfilledPath to $targetBackfilledPath")
 
@@ -182,7 +184,12 @@ trait ResolvedCatalogMetadataCommitter extends { self: BagOfPropertiesResolvedMe
       }
 
     logger.info(s"Invoking catalog with latest backfilled version: $commitAsVersion")
-//    catalogClient.setLatestBackfilledVersion(tableName, commitAsVersion)
+    val backfillProperties = allCandidateUnbackfilledFilePaths.map { path =>
+      (CATALOG_TRACKED_COMMIT_FILES_PREFIX + path, null)
+    }.toList
+    logger.info(s"backfillProperties: $backfillProperties")
+    catalogClient
+      .setProperties(tableName, backfillProperties)
     logger.info("Backfilling: END")
   }
 }
@@ -221,8 +228,6 @@ class StagingCatalogResolvedMetadata(
   // ===== ResolvedCatalogMetadataCommitter overrides ===== //
 
   override def logger: Logger = _logger
-
-  override def unbackfilledCommits: Seq[FileStatus] = Seq.empty
 }
 
 object StagingCatalogResolvedMetadata {
@@ -252,13 +257,6 @@ class ResolvedCatalogMetadata(
   // ===== ResolvedCatalogMetadataCommitter overrides ===== //
 
   override def logger: Logger = _logger
-
-  override def unbackfilledCommits: Seq[FileStatus] =
-    getLogSegment
-      .map[List[io.delta.kernel.utils.FileStatus]](
-        logSegment => logSegment.getDeltas.asScala.toList)
-      .asScala
-      .getOrElse(Seq.empty)
 
 }
 
