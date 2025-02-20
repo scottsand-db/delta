@@ -3,169 +3,96 @@ package io.delta.kernel.defaults.ccv2.setup
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-import io.delta.kernel.internal.actions.{Metadata, Protocol}
 import io.delta.kernel.internal.fs.Path
-import io.delta.kernel.internal.util.FileNames
-import io.delta.kernel.utils.FileStatus
 
 class InMemoryCatalogClient(workspace: Path = new Path("/tmp/in_memory_catalog/"))
   extends CatalogClient {
   import InMemoryCatalogClient._
-
-  case class CatalogTableData(
-      path: String,
-      var maxCommitVersion: Long = -1L,
-      var commits: scala.collection.mutable.ArrayBuffer[FileStatus],
-      var latestBackfilledVersion: Option[Long] = None,
-      var latestProtocol: Option[Protocol],
-      var latestMetadata: Option[Metadata]) {
-
-    def latestSchemaString: Option[String] = latestMetadata.map(_.getSchemaString)
-  }
-
   java.nio.file.Files.createDirectories(java.nio.file.Paths.get(workspace.toString))
+
+  ///////////////////
+  // Member values //
+  ///////////////////
+
+  case class CatalogTableData(properties: scala.collection.mutable.TreeMap[String, String])
 
   /** Map from tableName -> CatalogTableData */
   val catalogTables = new ConcurrentHashMap[String, CatalogTableData]()
 
   /** Map from tableName -> stagingTablePath */
-  // TODO: support concurrent staging tables
+  // TODO: support concurrent staging tables, probably using some UUID?
   val stagingTables = new ConcurrentHashMap[String, String]()
+
+  ////////////////
+  // Public API //
+  ////////////////
 
   override def createStagingTable(tableName: String): CreateStagingTableResponse = {
     catalogTables.get(tableName) match {
       case null =>
+        // TODO: support concurrent staging tables, probably using some UUID?
         val uuid = UUID.randomUUID().toString.replace("-", "").take(15)
         val tablePath = s"${workspace.toString}/${tableName}_$uuid"
-        logger.info(s"creating new staging table $tableName -> $tablePath")
+        logger.info(s"CREATE STAGING TABLE :: NEW :: $tableName -> $tablePath")
         stagingTables.put(tableName, tablePath)
         CreateStagingTableResponse.Success(tablePath)
-      case data =>
-        logger.info(s"table already exists $tableName, cannot create a new staging table")
-        CreateStagingTableResponse.TableAlreadyExists(tableName)
-    }
-  }
-
-  override def resolveTable(tableName: String): ResolveTableResponse = {
-    catalogTables.get(tableName) match {
-      case null =>
-        ResolveTableResponse.TableDoesNotExist(tableName)
-      case data =>
-        ResolveTableResponse.Success(
-          path = data.path,
-          version = data.maxCommitVersion,
-          protocol = data.latestProtocol,
-          metadata = data.latestMetadata,
-          schemaString = data.latestSchemaString
-        )
-    }
-  }
-
-  override def getCommits(tableName: String): GetCommitsResponse = {
-    catalogTables.get(tableName) match {
-      case null =>
-        logger.info(s"table does not exist :: $tableName")
-        GetCommitsResponse.TableDoesNotExist(tableName)
       case tableData =>
-        tableData.synchronized {
-          logger.info(s"table exists :: $tableName")
-          val tableCommitsStr = tableData.commits.map(f => s"  - ${f.getPath}").mkString("\n")
-          logger.info(s"tableData.commits (size=${tableData.commits.size}):\n$tableCommitsStr")
-
-          GetCommitsResponse.Success(tableData.commits.toList) // return an IMMUTABLE COPY
-        }
+        logger.info(s"CREATE STAGING TABLE :: ALREADY EXISTS :: $tableName")
+        CreateStagingTableResponse.TableAlreadyExists
     }
   }
 
-  override def commit(
-      tableName: String,
-      commitFile: FileStatus,
-      updatedProtocol: Option[Protocol],
-      updatedMetadata: Option[Metadata]): CommitResponse = {
+  override def getProperties(tableName: String): GetPropertiesResponse = {
     catalogTables.get(tableName) match {
       case null =>
+        logger.info(s"GET PROPERTIES > TABLE $tableName DOES NOT EXIST")
+        GetPropertiesResponse.TableDoesNotExist
+      case tableData =>
+        logger.info(s"GET PROPERTIES > TABLE $tableName EXISTS")
+        GetPropertiesResponse.Success(tableData.properties.toList)
+    }
+  }
+
+  override def setProperties(
+      tableName: String,
+      properties: List[(String, String)],
+      requirements: List[Requirement] = List.empty): SetPropertiesResponse = {
+    catalogTables.get(tableName) match {
+      case null =>
+        logger.info(s"SET PROPERTIES > TABLE $tableName DOES NOT EXIST")
         stagingTables.get(tableName) match {
           case null =>
-            logger.info(s"table does not exist :: $tableName")
-            CommitResponse.TableDoesNotExist(tableName)
+            logger.info(s"SET PROPERTIES > STAGING TABLE $tableName DOES NOT EXIST, EITHER")
+            SetPropertiesResponse.TableDoesNotExist
           case stagingTablePath =>
-            logger.info(s"Committing to a staging table :: $tableName")
-            val commitVersion = FileNames.uuidCommitDeltaVersion(commitFile.getPath)
-            logger.info(s"[staging table] commitVersion: $commitVersion")
-
-            if (commitVersion != 0) {
-              // TODO: support converting a fs table to a ccv2 table ???
-              throw new RuntimeException(
-                s"[staging table] Expected first commit version 0 but got version $commitVersion")
-            }
-            val tableData = CatalogTableData(
-              path = stagingTablePath,
-              maxCommitVersion = commitVersion,
-              commits = scala.collection.mutable.ArrayBuffer(commitFile),
-              latestProtocol = updatedProtocol,
-              latestMetadata = updatedMetadata
-            )
-            catalogTables.put(tableName, tableData)
-            stagingTables.remove(tableName)
-            CommitResponse.Success
+            logger.info(s"SET PROPERTIES > WRITING TO STAGING TABLE $stagingTablePath")
+            val data = CatalogTableData(scala.collection.mutable.TreeMap(properties: _*))
+            catalogTables.put(tableName, data)
+            SetPropertiesResponse.Success
         }
       case tableData =>
-        tableData.synchronized {
-          logger.info(s"table exists :: $tableName")
-          logger.info(s"commitFile: ${commitFile.getPath}")
+        logger.info(s"SET PROPERTIES > TABLE $tableName EXISTS")
 
-          val expectedCommitVersion = tableData.maxCommitVersion + 1
-          val commitVersion = FileNames.uuidCommitDeltaVersion(commitFile.getPath)
-
-          logger.info(s"expectedCommitVersion: $expectedCommitVersion")
-          logger.info(s"commitVersion: $commitVersion")
-
-          if (commitVersion != expectedCommitVersion) {
-            return CommitResponse.CommitVersionConflict(
-              commitVersion,
-              expectedCommitVersion,
-              tableData.commits.toList // return an IMMUTABLE COPY
-            )
+        requirements.foreach { requirement =>
+          requirement.f.apply(tableData.properties.toMap) match {
+            case false =>
+              logger.info(s"REQUIREMENT FAILED: ${requirement.name}")
+              return SetPropertiesResponse.RequirementFailed(
+                requirement, tableData.properties.toList)
+            case true =>
+              logger.info(s"REQUIREMENT SUCCEEDED: ${requirement.name}")
           }
-
-          tableData.maxCommitVersion = commitVersion
-          tableData.commits += commitFile
-          updatedProtocol.foreach(newP => tableData.latestProtocol = Some(newP))
-          updatedMetadata.foreach(newM => tableData.latestMetadata = Some(newM))
-
-          val tableCommitsStr = tableData.commits.map(f => s"  - ${f.getPath}").mkString("\n")
-          logger.info(s"tableData.commits:\n$tableCommitsStr")
-
-          CommitResponse.Success
         }
-    }
-  }
 
-  override def setLatestBackfilledVersion(
-      tableName: String,
-      latestBackfilledVersion: Long): SetLatestBackfilledVersionResponse = {
-    logger.info(s"tableName: $tableName, latestBackfilledVersion: $latestBackfilledVersion")
-
-    catalogTables.get(tableName) match {
-      case null => SetLatestBackfilledVersionResponse.TableDoesNotExist(tableName)
-      case tableData =>
-        tableData.synchronized {
-          if (latestBackfilledVersion > tableData.latestBackfilledVersion.getOrElse(-1L)) {
-            tableData.latestBackfilledVersion = Some(latestBackfilledVersion)
-            logger.info(s"Updated latestBackfilledVersion to $latestBackfilledVersion")
-
-            tableData.commits = tableData
-              .commits
-              .filter(f => FileNames.isUnbackfilledDeltaFile(f.getPath))
-              .dropWhile(f => {
-                val doDrop = FileNames.uuidCommitDeltaVersion(f.getPath) <= latestBackfilledVersion
-                logger.info(s"Checking if we should drop ${f.getPath}: $doDrop")
-                doDrop
-              })
-            logger.info(s"Removed catalog commits older than or equal to $latestBackfilledVersion")
-          }
-          SetLatestBackfilledVersionResponse.Success
+        properties.foreach {
+          case (key, null) =>
+            logger.info(s"REMOVE KEY $key")
+            tableData.properties -= key
+          case (key, value) =>
+            tableData.properties.update(key, value)
         }
+        logger.info(s"PROPERTIES IS NOW:\n${tableData.properties.mkString("\n")}")
+        SetPropertiesResponse.Success
     }
   }
 }

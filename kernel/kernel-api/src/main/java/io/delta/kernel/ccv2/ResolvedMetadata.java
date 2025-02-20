@@ -20,7 +20,9 @@ import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
 import io.delta.kernel.internal.snapshot.LogSegment;
+import io.delta.kernel.internal.util.Tuple2;
 import io.delta.kernel.utils.CloseableIterator;
+import java.util.Iterator;
 import java.util.Optional;
 
 public interface ResolvedMetadata {
@@ -60,10 +62,15 @@ public interface ResolvedMetadata {
   // APIs for Kernel to interact with the invoking connector //
   /////////////////////////////////////////////////////////////
 
-  // TODO: CommitInfo / timestamp
+  // TODO: metaInfo seems tightly coupled to catalog commits?
+  //       why would a file system committer need this?
+
+  /**
+   * @param metaInfo ordered key value pairs of UPDATES and OVERRIDES and REMOVES (where the value
+   *     is null) representing various Delta commit meta information
+   */
   CommitResult commit(
       long commitAsVersion,
       CloseableIterator<Row> finalizedActions,
-      Optional<Protocol> newProtocol,
-      Optional<Metadata> newMetadata);
+      Iterator<Tuple2<String, String>> metaInfo);
 }

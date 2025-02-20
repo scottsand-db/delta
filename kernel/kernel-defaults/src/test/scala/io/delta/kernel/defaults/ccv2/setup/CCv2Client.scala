@@ -1,17 +1,15 @@
 package io.delta.kernel.defaults.ccv2.setup
 
-import java.util
-import java.util.{Collections, Optional, UUID}
+import java.util.{Collections, UUID, Iterator => IteratorJ}
 
 import scala.collection.JavaConverters._
 
-import io.delta.kernel.ccv2.{CommitResult, ResolvedMetadata}
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.delta.kernel.ccv2.{BagOfPropertiesResolvedMetadata, CommitResult, ResolvedMetadata}
 import io.delta.kernel.data.Row
 import io.delta.kernel.engine.Engine
-import io.delta.kernel.internal.actions.{Metadata, Protocol}
 import io.delta.kernel.internal.fs.Path
-import io.delta.kernel.internal.snapshot.LogSegment
-import io.delta.kernel.internal.util.FileNames
+import io.delta.kernel.internal.util.{FileNames, Tuple2 => Tuple2J}
 import io.delta.kernel.utils.{CloseableIterator, FileStatus}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path => HadoopPath}
@@ -35,8 +33,9 @@ class CCv2Client(engine: Engine, catalogClient: CatalogClient) {
 // ResolvedCatalogMetadataCommitter //
 //////////////////////////////////////
 
-trait ResolvedCatalogMetadataCommitter extends { self: ResolvedMetadata =>
-
+trait ResolvedCatalogMetadataCommitter extends { self: BagOfPropertiesResolvedMetadata =>
+  import ResolvedCatalogMetadataCommitter._
+  import BagOfPropertiesResolvedMetadata._
   import JavaScalaUtils._
 
   // lazy so the child can finish initializing before we use `getPath`
@@ -54,8 +53,8 @@ trait ResolvedCatalogMetadataCommitter extends { self: ResolvedMetadata =>
   override def commit(
       commitAsVersion: Long,
       finalizedActions: CloseableIterator[Row],
-      newProtocol: Optional[Protocol],
-      newMetadata: Optional[Metadata]): CommitResult = {
+      metaInfo: IteratorJ[Tuple2J[String, String]]): CommitResult = {
+    val metaInfoList = metaInfo.asScala.toList // we want to print it out + use it multiple times
     val logPath = s"$getPath/_delta_log"
     val uuidCommitsPath = s"$logPath/_commits"
     val commitFilePath =
@@ -65,8 +64,7 @@ trait ResolvedCatalogMetadataCommitter extends { self: ResolvedMetadata =>
     logger.info(s"dataPath: $getPath")
     logger.info(s"commitAsVersion: $commitAsVersion")
     logger.info(s"commitFilePath: $commitFilePath")
-    logger.info(s"newProtocol: $newProtocol")
-    logger.info(s"newMetadata: $newMetadata")
+    logger.info(s"metaInfo: ${metaInfoList.map(x => (x._1, x._2)).mkString(", ")}")
 
     logger.info("Write UUID commit file: START")
     engine
@@ -79,31 +77,60 @@ trait ResolvedCatalogMetadataCommitter extends { self: ResolvedMetadata =>
     val kernelFs =
       FileStatus.of(hadoopFs.getPath.toString, hadoopFs.getLen, hadoopFs.getModificationTime)
 
+    val fsMapData = Map(
+      "size" -> hadoopFs.getLen.toString,
+      "modificationTime" -> hadoopFs.getModificationTime.toString)
+
+    val commitKey = CATALOG_TRACKED_COMMIT_FILES_PREFIX +
+      hadoopFs.getPath.toString
+    val commitJsonValue = OBJECT_MAPPER.writeValueAsString(fsMapData.asJava)
+    val requirement = Requirement(
+      name = "commitAsVersion",
+      f = latestProperties => {
+        val latestVersion = latestProperties.getOrElse(VERSION_KEY, "-1").toLong
+
+        latestVersion == commitAsVersion - 1
+      }
+    )
+
+    var allProperties = List((commitKey, commitJsonValue)) ++
+      metaInfoList.map(x => (x._1, x._2))
+
+    if (commitAsVersion == 0) {
+      allProperties = allProperties :+ (PATH_KEY, getPath)
+    }
+
     logger.info(s"hadoopFS: $hadoopFs")
     logger.info(s"kernelFs: $kernelFs")
-
+    logger.info(s"File status Entry: $commitKey -> $commitJsonValue")
+    logger.info(s"allProperties to write to catalog:\n${allProperties.mkString("\n")}")
     logger.info("Commit to catalog: START")
 
     val result = catalogClient
-      .commit(tableName, kernelFs, newProtocol.asScala, newMetadata.asScala) match {
-      case CommitResponse.Success =>
+      .setProperties(tableName, allProperties, List(requirement)) match {
+      case SetPropertiesResponse.Success =>
         logger.info("Commit to catalog: SUCCESS")
         new CommitResult.Success {
           override def getCommitAttemptVersion: Long = commitAsVersion
         }
-      case CommitResponse.TableDoesNotExist(tableName) =>
+      case SetPropertiesResponse.TableDoesNotExist =>
         logger.info("Commit to catalog: TABLE DOES NOT EXIST")
         new CommitResult.NonRetryableFailure {
           override def getMessage: String = s"Table $tableName does not exist"
+
           override def getCommitAttemptVersion: Long = commitAsVersion
         }
-      case CommitResponse.CommitVersionConflict(attempted, expected, commits) =>
+      case SetPropertiesResponse.RequirementFailed(
+      requirement, latestProperties: List[(String, String)]) =>
+        logger.info(s"Commit to catalog: REQUIREMENT FAILED ${requirement.name}")
         new CommitResult.RetryableFailure {
-          override def getMessage: String =
-            s"Commit version conflict: attempted=$attempted, expected=$expected"
+          override def getMessage: String = s"Requirement failed: ${requirement.name}"
+
           override def getCommitAttemptVersion: Long = commitAsVersion
 
-          override def unbackfilledCommits(): util.List[FileStatus] = commits.toList.asJava
+          override def properties(): java.util.List[Tuple2J[String, String]] = {
+            latestProperties.map { case (k, v) => new Tuple2J(k, v) }.asJava
+          }
         }
     }
 
@@ -155,9 +182,15 @@ trait ResolvedCatalogMetadataCommitter extends { self: ResolvedMetadata =>
       }
 
     logger.info(s"Invoking catalog with latest backfilled version: $commitAsVersion")
-    catalogClient.setLatestBackfilledVersion(tableName, commitAsVersion)
+//    catalogClient.setLatestBackfilledVersion(tableName, commitAsVersion)
     logger.info("Backfilling: END")
   }
+}
+
+object ResolvedCatalogMetadataCommitter {
+  // create object mapper
+  private val OBJECT_MAPPER = new ObjectMapper;
+
 }
 
 ////////////////////////////////////
@@ -168,37 +201,28 @@ class StagingCatalogResolvedMetadata(
     override val tableName: String,
     override val engine: Engine,
     override val catalogClient: CatalogClient)
-  extends ResolvedMetadata with ResolvedCatalogMetadataCommitter {
+  extends BagOfPropertiesResolvedMetadata with ResolvedCatalogMetadataCommitter {
 
+  import BagOfPropertiesResolvedMetadata._
   import StagingCatalogResolvedMetadata._
 
-  val stagingTablePath = catalogClient.createStagingTable(tableName) match {
-    case CreateStagingTableResponse.Success(path) => path
-    case CreateStagingTableResponse.TableAlreadyExists(tableName) =>
+  catalogClient.createStagingTable(tableName) match {
+    case CreateStagingTableResponse.Success(path) =>
+      super.initialize(
+        Seq(
+          new Tuple2J(PATH_KEY, path),
+          new Tuple2J(VERSION_KEY, "-1"),
+        ).toList.asJava
+      )
+    case CreateStagingTableResponse.TableAlreadyExists =>
       throw new RuntimeException(s"Table $tableName already exists")
   }
-
-  _logger.info(s"stagingTablePath: $stagingTablePath")
 
   // ===== ResolvedCatalogMetadataCommitter overrides ===== //
 
   override def logger: Logger = _logger
 
   override def unbackfilledCommits: Seq[FileStatus] = Seq.empty
-
-  // ===== ResolvedMetadata overrides ===== //
-
-  override def getPath: String = stagingTablePath
-
-  override def getVersion: Long = -1
-
-  override def getLogSegment: Optional[LogSegment] = Optional.empty()
-
-  override def getProtocol: Optional[Protocol] = Optional.empty()
-
-  override def getMetadata: Optional[Metadata] = Optional.empty()
-
-  override def getSchemaString: Optional[String] = Optional.empty()
 }
 
 object StagingCatalogResolvedMetadata {
@@ -213,29 +237,17 @@ class ResolvedCatalogMetadata(
     override val tableName: String,
     override val engine: Engine,
     override val catalogClient: CatalogClient)
-  extends ResolvedMetadata with ResolvedCatalogMetadataCommitter {
+  extends BagOfPropertiesResolvedMetadata with ResolvedCatalogMetadataCommitter {
+
   import JavaScalaUtils._
   import ResolvedCatalogMetadata._
 
-  private val resolvedTableResponse: ResolveTableResponse.Success =
-    catalogClient.resolveTable(tableName) match {
-      case success: ResolveTableResponse.Success =>
-        _logger.info(s"Received success ResolveTableResponse: $success")
-        success
-      case ResolveTableResponse.TableDoesNotExist(tableName) =>
-        throw new RuntimeException(s"Table $tableName does not exist")
-    }
-
-  private val getCommitsResponse: GetCommitsResponse.Success =
-    catalogClient.getCommits(tableName) match {
-      case success: GetCommitsResponse.Success =>
-        _logger.info(s"Received success GetCommitsResponse: $success")
-        success
-      case GetCommitsResponse.TableDoesNotExist(tableName) =>
-        throw new RuntimeException(s"Table $tableName does not exist")
-    }
-
-  private val dataPath = resolvedTableResponse.path
+  catalogClient.getProperties(tableName) match {
+    case GetPropertiesResponse.Success(properties) =>
+      super.initialize(properties.map { case (k, v) => new Tuple2J(k, v) }.asJava)
+    case GetPropertiesResponse.TableDoesNotExist =>
+      throw new RuntimeException(s"Table $tableName does not exists")
+  }
 
   // ===== ResolvedCatalogMetadataCommitter overrides ===== //
 
@@ -247,29 +259,6 @@ class ResolvedCatalogMetadata(
         logSegment => logSegment.getDeltas.asScala.toList)
       .asScala
       .getOrElse(Seq.empty)
-
-  // ===== ResolvedMetadata overrides ===== //
-
-  override def getPath: String = dataPath
-
-  override def getVersion: Long = resolvedTableResponse.version
-
-  override def getLogSegment: Optional[LogSegment] =
-    Optional.of(
-      new LogSegment(
-        new Path(resolvedTableResponse.path, "_delta_log"),
-        resolvedTableResponse.version,
-        getCommitsResponse.commits.toList.asJava,
-        Collections.emptyList(),
-        100
-      )
-    )
-
-  override def getProtocol: Optional[Protocol] = resolvedTableResponse.protocol.asJava
-
-  override def getMetadata: Optional[Metadata] = resolvedTableResponse.metadata.asJava
-
-  override def getSchemaString: Optional[String] = resolvedTableResponse.schemaString.asJava
 
 }
 

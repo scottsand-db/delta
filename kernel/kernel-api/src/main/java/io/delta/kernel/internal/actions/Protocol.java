@@ -17,6 +17,9 @@ package io.delta.kernel.internal.actions;
 
 import static io.delta.kernel.internal.util.VectorUtils.stringArrayValue;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.delta.kernel.data.*;
 import io.delta.kernel.internal.TableFeatures;
 import io.delta.kernel.internal.data.GenericRow;
@@ -26,9 +29,16 @@ import io.delta.kernel.types.ArrayType;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructType;
+import java.io.IOException;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Protocol {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(Protocol.class);
+
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   public static Protocol fromColumnVector(ColumnVector vector, int rowId) {
     if (vector.isNullAt(rowId)) {
@@ -44,6 +54,26 @@ public class Protocol {
         vector.getChild(3).isNullAt(rowId)
             ? Collections.emptyList()
             : VectorUtils.toJavaList(vector.getChild(3).getArray(rowId)));
+  }
+
+  public static Protocol fromJson(String json) {
+    LOGGER.info("Parsing Protocol from JSON: " + json);
+    try {
+      final JsonNode jsonNode = OBJECT_MAPPER.readTree(json);
+      return new Protocol(
+          jsonNode.get("minReaderVersion").asInt(),
+          jsonNode.get("minWriterVersion").asInt(),
+          jsonNode.has("readerFeatures")
+              ? OBJECT_MAPPER.convertValue(
+                  jsonNode.get("readerFeatures"), new TypeReference<List<String>>() {})
+              : Collections.emptyList(),
+          jsonNode.has("writerFeatures")
+              ? OBJECT_MAPPER.convertValue(
+                  jsonNode.get("writerFeatures"), new TypeReference<List<String>>() {})
+              : Collections.emptyList());
+    } catch (IOException e) {
+      throw new IllegalArgumentException("Failed to parse Protocol from JSON: " + json, e);
+    }
   }
 
   public static final StructType FULL_SCHEMA =
