@@ -23,6 +23,7 @@ import static io.delta.kernel.internal.util.Preconditions.checkState;
 import static io.delta.kernel.internal.util.Utils.toCloseableIterator;
 
 import io.delta.kernel.*;
+import io.delta.kernel.ccv2.BagOfPropertiesResolvedMetadata;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.ConcurrentWriteException;
@@ -159,6 +160,31 @@ public class TransactionImpl implements Transaction {
       return Optional.of(metadata);
     }
     return Optional.empty();
+  }
+
+  @Override
+  public Iterator<Tuple2<String, String>> getMetaInfo() {
+    final List<Tuple2<String, String>> output = new ArrayList<>();
+    getUpdatedProtocol()
+        .ifPresent(
+            newProtocol ->
+                output.add(
+                    new Tuple2<>(
+                        BagOfPropertiesResolvedMetadata.PROTOCOL_KEY,
+                        JsonUtils.rowToJson(newProtocol.toRow()))));
+
+    getUpdatedMetadata()
+        .ifPresent(
+            newMetadata ->
+                output.add(
+                    new Tuple2<>(
+                        BagOfPropertiesResolvedMetadata.METADATA_KEY,
+                        JsonUtils.rowToJson(newMetadata.toRow()))));
+
+    output.add(
+        new Tuple2<>(BagOfPropertiesResolvedMetadata.VERSION_KEY, Long.toString(commitAsVersion)));
+
+    return output.iterator();
   }
 
   @Override

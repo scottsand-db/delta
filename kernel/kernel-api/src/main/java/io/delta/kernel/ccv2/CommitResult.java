@@ -16,7 +16,7 @@
 
 package io.delta.kernel.ccv2;
 
-import io.delta.kernel.utils.FileStatus;
+import io.delta.kernel.internal.util.Tuple2;
 import java.util.List;
 
 public interface CommitResult {
@@ -52,8 +52,10 @@ public interface CommitResult {
 
     String getMessage();
 
+    List<Tuple2<String, String>> properties();
+
     // TODO: just call this catalog-registered commits? might be unbackfilled, might be backfilled,
     //       but we can all agree that they are registered in the catalog
-    List<FileStatus> unbackfilledCommits();
+    // List<FileStatus> unbackfilledCommits();
   }
 }

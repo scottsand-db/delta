@@ -11,7 +11,6 @@ import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch
 import io.delta.kernel.defaults.utils.TestRow
 import io.delta.kernel.test.VectorTestUtils
 import io.delta.kernel.utils.{CloseableIterable, CloseableIterator}
-import org.datanucleus.ExecutionContext
 import org.scalatest.funsuite.AnyFunSuite
 
 // scalastyle:off println
@@ -129,8 +128,9 @@ class InMemoryCCv2Suite extends AnyFunSuite
       val result = rm.commit(
         txn.getCommitAsVersion,
         txn.getFinalizedActions(defaultEngine),
-        txn.getUpdatedProtocol,
-        txn.getUpdatedMetadata
+        txn.getMetaInfo
+//        txn.getUpdatedProtocol,
+//        txn.getUpdatedMetadata
       )
 
       attempt += 1
@@ -146,16 +146,17 @@ class InMemoryCCv2Suite extends AnyFunSuite
           println(s"Commit failed (non-retryable) with: ${fail.getMessage}")
           throw new RuntimeException(s"Commit failed (non-retryable): ${fail.getMessage}")
         case retryable: CommitResult.RetryableFailure =>
-          println(s"Commit failed (retryable) with: ${retryable.getMessage}. " +
-            s"Unbackfilled commits: ${retryable.unbackfilledCommits()}")
-
-          txn.resolveConflictsAndRebase(defaultEngine, retryable.unbackfilledCommits())
-
-          if (attempt < MAX_ATTEMPTS) {
-            println(s"Retrying in $sleepMillis ms...")
-            Thread.sleep(sleepMillis)
-            sleepMillis *= 2 // Exponential backoff (doubles each time)
-          }
+          // TODO: get the unbackfilled commits from the properties returned by the catalog
+//          println(s"Commit failed (retryable) with: ${retryable.getMessage}. " +
+//            s"Unbackfilled commits: ${retryable.unbackfilledCommits()}")
+//
+//          txn.resolveConflictsAndRebase(defaultEngine, retryable.unbackfilledCommits())
+//
+//          if (attempt < MAX_ATTEMPTS) {
+//            println(s"Retrying in $sleepMillis ms...")
+//            Thread.sleep(sleepMillis)
+//            sleepMillis *= 2 // Exponential backoff (doubles each time)
+//          }
       }
     }
 

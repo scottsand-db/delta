@@ -10,81 +10,51 @@ import io.delta.kernel.utils.FileStatus
 trait CatalogClient {
   def createStagingTable(tableName: String): CreateStagingTableResponse
 
-  def resolveTable(tableName: String): ResolveTableResponse
+  def getProperties(tableName: String): GetPropertiesResponse
 
-  def getCommits(tableName: String): GetCommitsResponse
-
-  // TODO: we might want to pass the commit timestamp? For the case of ICT?
-  // TODO: can we avoid passing in Kernel/Delta types to the catalog?
-  def commit(
+  // e.g. COMMIT --> add new properties for UUID file status, protocol, metadata
+  // e.g. SET LAST BACKFILLED VERSION --> ???? remove all properties which we parse and determine
+  //      the version is less than the incoming version ???
+  def setProperties(
       tableName: String,
-      commitFile: FileStatus,
-      updatedProtocol: Option[Protocol] = None,
-      updatedMetadata: Option[Metadata] = None): CommitResponse
+      properties: List[(String, String)],
+      requirements: List[Requirement] = List.empty
+  ): SetPropertiesResponse
 
-  def setLatestBackfilledVersion(
-      tableName: String,
-      latestBackfilledVersion: Long): SetLatestBackfilledVersionResponse
 }
 
-// ===== CreateStagingTableResponse =====
+case class Requirement(name: String, f: Map[String, String] => Boolean)
+
+// ===== CreateStagingTableResponse ===== //
 
 sealed trait CreateStagingTableResponse
 
 object CreateStagingTableResponse {
   final case class Success(path: String) extends CreateStagingTableResponse
 
-  final case class TableAlreadyExists(tableName: String) extends CreateStagingTableResponse
+  final case object TableAlreadyExists extends CreateStagingTableResponse
 }
 
-// ===== ResolveTableResponse =====
+// ===== GetPropertiesResponse ===== //
 
-sealed trait ResolveTableResponse
+sealed trait GetPropertiesResponse
 
-object ResolveTableResponse {
+object GetPropertiesResponse {
+  final case class Success(properties: List[(String, String)]) extends GetPropertiesResponse
 
-  final case class Success(
-      path: String,
-      version: Long,
-      protocol: Option[Protocol],
-      metadata: Option[Metadata],
-      schemaString: Option[String]) extends ResolveTableResponse
-
-  final case class TableDoesNotExist(tableName: String) extends ResolveTableResponse
+  final case object TableDoesNotExist extends GetPropertiesResponse
 }
 
-// ===== GetCommitsResponse =====
+// ===== SetPropertiesResponse ===== //
 
-sealed trait GetCommitsResponse
+sealed trait SetPropertiesResponse
 
-object GetCommitsResponse {
-  final case class Success(
-      commits: scala.collection.immutable.Seq[FileStatus]) extends GetCommitsResponse
+object SetPropertiesResponse {
+  final case object Success extends SetPropertiesResponse
 
-  final case class TableDoesNotExist(tableName: String) extends GetCommitsResponse
-}
+  final case object TableDoesNotExist extends SetPropertiesResponse
 
-// ===== CommitResponse =====commits
-
-sealed trait CommitResponse
-
-object CommitResponse {
-  case object Success extends CommitResponse
-
-  final case class TableDoesNotExist(tableName: String) extends CommitResponse
-
-  final case class CommitVersionConflict(
-      attemptedCommitVersion: Long,
-      expectedVersion: Long,
-      commits: scala.collection.immutable.Seq[FileStatus]) extends CommitResponse
-}
-
-// ===== SetLatestBackfilledVersionResponse =====
-
-sealed trait SetLatestBackfilledVersionResponse
-
-object SetLatestBackfilledVersionResponse {
-  case object Success extends SetLatestBackfilledVersionResponse
-
-  final case class TableDoesNotExist(tableName: String) extends SetLatestBackfilledVersionResponse
+  final case class RequirementFailed(
+      requirement: Requirement,
+      properties: List[(String, String)]) extends SetPropertiesResponse
 }

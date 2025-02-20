@@ -19,16 +19,26 @@ import static io.delta.kernel.internal.util.InternalUtils.requireNonNull;
 import static io.delta.kernel.internal.util.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.delta.kernel.data.*;
 import io.delta.kernel.internal.data.GenericRow;
 import io.delta.kernel.internal.lang.Lazy;
 import io.delta.kernel.internal.types.DataTypeJsonSerDe;
 import io.delta.kernel.internal.util.VectorUtils;
 import io.delta.kernel.types.*;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Metadata {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(Metadata.class);
+
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   public static Metadata fromColumnVector(ColumnVector vector, int rowId) {
     if (vector.isNullAt(rowId)) {
@@ -52,6 +62,58 @@ public class Metadata {
         Optional.ofNullable(
             vector.getChild(6).isNullAt(rowId) ? null : vector.getChild(6).getLong(rowId)),
         vector.getChild(7).getMap(rowId));
+  }
+
+  public static Metadata fromJson(String json) {
+    LOGGER.info("Parsing Metadata from JSON: " + json);
+    try {
+      final JsonNode rootNode = OBJECT_MAPPER.readTree(json);
+
+      String id = rootNode.get("id").asText();
+      Optional<String> name =
+          rootNode.has("name") && !rootNode.get("name").isNull()
+              ? Optional.of(rootNode.get("name").asText())
+              : Optional.empty();
+      Optional<String> description =
+          rootNode.has("description") && !rootNode.get("description").isNull()
+              ? Optional.of(rootNode.get("description").asText())
+              : Optional.empty();
+
+      Format format = new Format("parquet", Collections.emptyMap());
+
+      String schemaString = rootNode.get("schemaString").asText();
+      StructType schema = DataTypeJsonSerDe.deserializeStructType(schemaString);
+
+      List<String> partitionColumns =
+          rootNode.has("partitionColumns")
+              ? OBJECT_MAPPER.convertValue(
+                  rootNode.get("partitionColumns"), new TypeReference<List<String>>() {})
+              : Collections.emptyList();
+
+      Optional<Long> createdTime =
+          rootNode.has("createdTime") && !rootNode.get("createdTime").isNull()
+              ? Optional.of(rootNode.get("createdTime").asLong())
+              : Optional.empty();
+
+      Map<String, String> configuration =
+          rootNode.has("configuration")
+              ? OBJECT_MAPPER.convertValue(
+                  rootNode.get("configuration"), new TypeReference<Map<String, String>>() {})
+              : Collections.emptyMap();
+
+      return new Metadata(
+          id,
+          name,
+          description,
+          format,
+          schemaString,
+          schema,
+          VectorUtils.stringArrayValue(partitionColumns),
+          createdTime,
+          VectorUtils.stringStringMapValue(configuration));
+    } catch (IOException e) {
+      throw new IllegalArgumentException("Failed to parse Metadata from JSON: " + json, e);
+    }
   }
 
   public static final StructType FULL_SCHEMA =

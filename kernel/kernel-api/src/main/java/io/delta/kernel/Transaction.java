@@ -36,9 +36,11 @@ import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
 import io.delta.kernel.internal.actions.SingleAction;
 import io.delta.kernel.internal.fs.Path;
+import io.delta.kernel.internal.util.Tuple2;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.*;
 import java.net.URI;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -82,9 +84,13 @@ public interface Transaction {
 
   //  CloseableIterator<Row> finalizeActions(Engine engine, CloseableIterator<Row> dataActions);
 
+  // TODO: this is for the old POJO approach .... we don't need this for bag of properties?
   Optional<Protocol> getUpdatedProtocol();
 
+  // TODO: this is for the old POJO approach .... we don't need this for bag of properties?
   Optional<Metadata> getUpdatedMetadata();
+
+  Iterator<Tuple2<String, String>> getMetaInfo();
 
   long getCommitAsVersion();
 
